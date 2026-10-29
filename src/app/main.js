@@ -1,8 +1,11 @@
 import { AudioEngine } from '../audio/engine.js';
 import { estimateBPM, computePeaks } from '../audio/bpm.js';
 import { createHandTracker, startCamera } from '../camera/tracker.js';
-import { PinchDetector, Smoother, ControlRegistry, pinchRatio, clamp, expandRect, mapCoverPoint, handsDistance, TwoHandSession } from '../gestures/logic.js';
+import { PinchDetector, Smoother, ControlRegistry, pinchRatio, clamp, expandRect, mapVideoPointInBox, parseObjectPosition, visibleVideoWindow, fitFromObjectFit, knobDragValue, knobAngle, handsDistance, TwoHandSession } from '../gestures/logic.js';
+import { aperture01, ClawController, clawGate } from '../gestures/claw.js';
 import { transitionValues, expressiveValues, smooth } from '../audio/transition.js';
+import { evaluateAutoDj, autoDjTriggerKey } from '../audio/autodj.js';
+import { createEffectSelection, cycleEffect, effectById } from '../audio/effects.js';
 
 const $ = s => document.querySelector(s);
 const stage = $('#stage'), video = $('#cam'), overlay = $('#overlay');
@@ -19,37 +22,39 @@ function status(msg) { $('#status').textContent = msg; }
 function deckHTML(d, i) {
   const col = i === 0 ? 'var(--a)' : 'var(--b)';
   d.el.innerHTML = `
-  <h3 class="deck-a-title">DECK ${d.name} · <span class="tname">Sin pista</span></h3>
+  <div class="deck-head"><span class="badge">${d.name}</span><h3><span class="tname">Sin pista</span></h3><span class="time bpm">BPM —</span></div>
   <canvas class="wave" width="480" height="88"></canvas>
   <div class="row"><span class="time pos">0:00</span><span class="grow"></span><span class="time bpm">BPM —</span><span class="time rem">-0:00</span></div>
-  <div class="jog"><i></i></div>
-  <div class="row transport">
+  <div class="deck-mid"><div class="jog"><i></i></div><div class="transport">
+  <div class="rowb">
     <button class="btn cue" data-act="cue">CUE</button>
     <button class="btn play" data-act="play">▶ PLAY</button>
-    <button class="btn" data-act="sync" title="Iguala tempo, no alinea golpes">SYNC tempo</button>
+    <button class="btn" data-act="sync" title="Iguala tempo, no alinea golpes">SYNC</button>
   </div>
   <label>Tempo <span class="tempoval">+0.0%</span><input class="tempo" type="range" min="-8" max="8" step="0.1" value="0" data-g="range" data-deck="${i}" data-param="tempo"></label>
   <div class="row">
     <button class="btn small padmode" data-mode="hotcue" title="Pinza/clic para cambiar de modo">MODO: HOT CUE</button>
-    <button class="btn small loopbtn" data-act="loop">LOOP 4</button><span class="time loopinfo"></span>
+    <button class="btn small loopbtn dj-only" data-act="loop">LOOP 4</button></div></div>
   </div>
-  <div class="pads">${Array.from({ length: 8 }, (_, p) => `<button class="pad" data-pad="${p}">PAD ${p + 1}</button>`).join('')}</div>`;
+  <div class="pads">${Array.from({ length: 8 }, (_, p) => `<button class="pad" data-pad="${p}">${p + 1}<br>PAD</button>`).join('')}</div>`;
 }
 decks.forEach(deckHTML);
 $('#mixer').innerHTML = `
-  <h3>MEZCLADOR</h3>
-  ${[0, 1].map(i => `<div class="knobs">
-    ${[['trim', 'TRIM', 0, 2, 1], ['low', 'GRAVES', -24, 24, 0], ['mid', 'MEDIOS', -24, 24, 0], ['high', 'AGUDOS', -24, 24, 0]].map(([p, l, mn, mx, v]) =>
-      `<div class="knob"><label>${l} ${i === 0 ? 'A' : 'B'}</label><input type="range" min="${mn}" max="${mx}" step="0.5" value="${v}" data-g="range" data-deck="${i}" data-param="${p}"></div>`).join('')}
+  <h3 style="text-align:center;margin:2px 0 8px">MEZCLADOR</h3>
+  ${[0, 1].map(i => `<div class="eqgrid"><div class="eqcol"><strong>CANAL ${'AB'[i]}</strong>
+    ${[['high', 'HIGH', -24, 24, 0, 'dj-only'], ['mid', 'MID', -24, 24, 0, 'dj-only'], ['low', 'LOW', -24, 24, 0, ''], ['trim', 'TRIM', 0, 2, 1, 'dj-only']].map(([p, l, mn, mx, v, cls]) =>
+      (i === 0 && p === 'low'
+        ? `<div class="knobwrap"><button type="button" class="knob" data-g="knob" data-deck="0" data-param="low" aria-label="LOW, Deck A"><span class="knob-dial"><i></i></span></button><label>LOW</label><input class="knob-state" type="range" min="-24" max="24" step="0.5" value="0" data-g="range" data-deck="0" data-param="low" hidden></div>`
+        : `<div class="${cls}"><label>${l}</label><input type="range" min="${mn}" max="${mx}" step="0.5" value="${v}" data-g="range" data-deck="${i}" data-param="${p}"></div>`)).join('')}
   </div>
   <label>FILTRO ${i === 0 ? 'A' : 'B'} <input type="range" min="-50" max="50" step="1" value="50" data-g="range" data-deck="${i}" data-param="filter"></label>
-  <label>VOLUMEN ${i === 0 ? 'A' : 'B'} <input type="range" min="0" max="1" step="0.01" value="0.85" data-g="range" data-deck="${i}" data-param="vol"></label>
-  <div class="meter-row"><span>CH ${i === 0 ? 'A' : 'B'}</span><div class="meter"><i class="chmeter"></i></div></div>`).join('')}
-  <div class="cross"><label>CROSSFADER</label>
+  </div>
+  <div class="meter-row"><div class="meter"><i class="chmeter"></i></div></div></div>`).join('')}
+  <div class="faderow"><div>VOL A<br><input class="vfader" type="range" min="0" max="1" step="0.01" value="0.85" data-g="range" data-orient="v" data-deck="0" data-param="vol"></div><div class="dj-only">FX DELAY<br><input type="range" min="0" max="0.8" step="0.01" value="0" data-g="range" data-param="delay" style="width:90px"><br>FX REVERB<br><input type="range" min="0" max="0.8" step="0.01" value="0" data-g="range" data-param="verb" style="width:90px"></div><div>VOL B<br><input class="vfader" type="range" min="0" max="1" step="0.01" value="0.85" data-g="range" data-orient="v" data-deck="1" data-param="vol"></div></div>
+  <div class="crossbox"><label style="display:block;text-align:center;font-size:11px">CROSSFADER</label>
   <input id="cross" type="range" min="-1" max="1" step="0.01" value="0" data-g="range" data-param="cross">
-  <div class="row"><span>A</span><span class="grow"></span><span>B</span></div></div>
-  <label>FX DELAY <input type="range" min="0" max="0.8" step="0.01" value="0" data-g="range" data-param="delay"></label>
-  <label>FX REVERB <input type="range" min="0" max="0.8" step="0.01" value="0" data-g="range" data-param="verb"></label>`;
+  <div class="row"><strong style="color:var(--a)">A</strong><span class="grow"></span><strong style="color:var(--b)">B</strong></div></div>
+  </div>`;
 
 function ensureEngine() {
   if (!engine) { engine = new AudioEngine(); status('Audio activado. Carga demos o importa música.'); }
@@ -73,7 +78,7 @@ function renderLibrary() {
   library.filter(t => t.name.toLowerCase().includes(q)).forEach(t => {
     const li = document.createElement('li');
     if (selectedTrack === t) li.className = 'sel';
-    li.innerHTML = `<span>${t.name}</span><span>${decks.map((d, i) => d.track === t ? `<span class="badge">DECK ${'AB'[i]}</span>` : '').join('')}</span>`;
+    li.innerHTML = `<span>${t.name}</span><span>${decks.map((d, i) => d.track === t ? `<span class="tagdeck">DECK ${'AB'[i]}</span>` : '').join('')}</span>`;
     li.onclick = () => { selectedTrack = t; renderLibrary(); };
     ul.appendChild(li);
   });
@@ -186,10 +191,20 @@ function applyCal(save = true) {
   consoleEl.style.transform = `translateX(calc(-50% + ${x}px)) scale(${s})`;
   consoleEl.style.bottom = `calc(3% + ${-y}px)`;
   document.documentElement.style.setProperty('--ctl', $('#calSize').value);
-  if (save) localStorage.setItem('motiondj-cal', JSON.stringify({ s, x, y, size: $('#calSize').value, sens: $('#calSens').value }));
+  document.documentElement.style.setProperty('--alpha', $('#calOpacity')?.value || 0.86);
+  const kv = $('#calKnobVal'); if (kv) kv.textContent = $('#calKnob')?.value || 220;
+  if (save) localStorage.setItem('motiondj-cal', JSON.stringify({ s, x, y, size: $('#calSize').value, sens: $('#calSens').value, knob: $('#calKnob')?.value || 220 }));
 }
-try { const c = JSON.parse(localStorage.getItem('motiondj-cal') || 'null'); if (c) { $('#calScale').value = c.s; $('#calX').value = c.x; $('#calY').value = c.y; $('#calSize').value = c.size; $('#calSens').value = c.sens; } } catch {}
-['calScale', 'calX', 'calY', 'calSize', 'calSens'].forEach(id => $('#' + id).addEventListener('input', () => applyCal()));
+try { const c = JSON.parse(localStorage.getItem('motiondj-cal') || 'null'); if (c) { $('#calScale').value = c.s; $('#calX').value = c.x; $('#calY').value = c.y; $('#calSize').value = c.size; $('#calSens').value = c.sens; if (c.knob && $('#calKnob')) $('#calKnob').value = c.knob; } } catch {}
+['calScale', 'calX', 'calY', 'calSize', 'calSens', 'calHit', 'calOpacity', 'calKnob'].forEach(id => { const el = $('#' + id); if (el) el.addEventListener('input', () => applyCal()); });
+// ---------- Vistas Facil / DJ (mismo estado y motor; solo cambia visibilidad) ----------
+function setView(v) { requestAnimationFrame(() => { if (typeof hands !== 'undefined') hands.forEach(h => { h.smoothX.reset(); h.smoothY.reset(); }); if (typeof rebuildRegistry === 'function') rebuildRegistry(); });
+  document.body.dataset.view = v;
+  $('#btnViewEasy').setAttribute('aria-pressed', v === 'easy'); $('#btnViewDJ').setAttribute('aria-pressed', v === 'dj');
+  localStorage.setItem('motiondj-view', v);
+}
+$('#btnViewEasy').onclick = () => setView('easy'); $('#btnViewDJ').onclick = () => setView('dj');
+setView(localStorage.getItem('motiondj-view') || 'dj');
 applyCal(false);
 let locked = false;
 $('#btnLock').onclick = e => { locked = !locked; ['calScale', 'calX', 'calY'].forEach(id => $('#' + id).disabled = locked); e.target.textContent = locked ? 'Desbloquear mesa' : 'Bloquear mesa'; };
@@ -212,9 +227,10 @@ function applyTransitionFrame(vals, target, progress01) {
   if (vals.delay !== undefined) engine.decks.forEach(d => d.delaySend.gain.setTargetAtTime(vals.delay, engine.ctx.currentTime, 0.05));
   $('#twoProgress').style.width = `${progress01 * 100}%`; $('#twoProgressVal').textContent = `${Math.round(progress01 * 100)}%`;
 }
-function startAutoTransition() {
+let autoDjLastKey = null, autoDjTimerBusy = false, autoDjLastCheck = 0;
+function startAutoTransition(targetOverride, durOverride) {
   ensureEngine(); cancelAuto(false);
-  const target = Number($('#twoTarget').value), dur = Number($('#twoDuration').value);
+  const target = targetOverride !== undefined ? targetOverride : Number($('#twoTarget').value), dur = durOverride !== undefined ? durOverride : Number($('#twoDuration').value);
   const from = Number($('#cross').value), lowFrom = [0, 1].map(i => Number(lowInput(i)?.value || 0)), t0 = performance.now();
   $('#btnTwoCancel').disabled = false;
   twoBanner(`Transición automática hacia ${target === 1 ? 'B' : 'A'} en curso… Cancela para retomar el control.`);
@@ -222,9 +238,14 @@ function startAutoTransition() {
     const k = Math.min(1, (performance.now() - t0) / dur), vals = transitionValues(k, from, target), outIdx = target === 1 ? 0 : 1;
     vals.lowOut = lowFrom[outIdx] + (-18 - lowFrom[outIdx]) * smooth(k);
     applyTransitionFrame(vals, target, k);
-    if (k >= 1) { cancelAuto(false); twoBanner(''); twoStatus('Transición automática finalizada. Control manual activo.'); }
+    if (k >= 1) { if (autoDjTimerBusy && engine) { const outIdx = target === 1 ? 0 : 1; if (engine.decks[outIdx].playing) engine.decks[outIdx].pause(); refreshTransport(); } cancelAuto(false); autoDjTimerBusy = false; twoBanner(''); twoStatus('Transición automática finalizada. Control manual activo.'); }
   }, 50);
 }
+function autoDjPlanNow() { return evaluateAutoDj({ enabled: $('#autoDjEnabled').checked, cross: Number($('#cross').value || 0), anticipationSec: Number($('#autoDjAnt').value || 15), decks: decks.map((d, i) => ({ hasTrack: !!d.track, playing: !!engine?.decks[i].playing, position: engine && d.track ? engine.decks[i].position() : 0, duration: d.track ? d.track.buffer.duration : null })) }); }
+function autoDjRender(plan) { $('#autoDjActive').textContent = `Activo: ${plan.active === null ? '—' : 'Deck ' + 'AB'[plan.active]}`; $('#autoDjNext').textContent = `Destino: ${plan.next === null ? '—' : 'Deck ' + 'AB'[plan.next] + (plan.ready ? ' (pista lista)' : ' (sin pista)')}`; $('#autoDjStatus').textContent = plan.reason; $('#btnAutoDjNow').disabled = !(plan.ready && plan.active !== null && !smartTimer && !autoDjTimerBusy); $('#btnAutoDjCancel').disabled = !($('#autoDjEnabled').checked || smartTimer); $('#autoDjAntVal').textContent = $('#autoDjAnt').value; }
+function startAutoDjTransition(plan, why) { if (!plan.ready || plan.active === null || smartTimer) return false; ensureEngine(); const next = plan.next; $('#twoTarget').value = String(next === 1 ? 1 : -1); if (!engine.decks[next].playing) engine.decks[next].play(); refreshTransport(); autoDjTimerBusy = true; startAutoTransition(next === 1 ? 1 : -1, Number($('#autoDjDuration').value)); $('#autoDjStatus').textContent = `${why}: pasando de ${'AB'[plan.active]} a ${'AB'[next]} en ${Number($('#autoDjDuration').value) / 1000} s. Cancela para retomar el control.`; return true; }
+function checkAutoDj(now) { const plan = autoDjPlanNow(); autoDjRender(plan); if (!plan.shouldTransition || smartTimer || autoDjTimerBusy) return; const key = autoDjTriggerKey(plan, decks.map(d => d.track?.id)); if (key === autoDjLastKey) return; autoDjLastKey = key; startAutoDjTransition(plan, 'Auto DJ'); }
+function cancelAutoDj(msg) { $('#autoDjEnabled').checked = false; autoDjLastKey = null; if (autoDjTimerBusy) { cancelAuto(false); autoDjTimerBusy = false; } twoBanner(''); autoDjRender(autoDjPlanNow()); $('#autoDjStatus').textContent = msg || 'Auto DJ pausado. Control manual activo; los valores quedan donde estan, sin saltos.'; }
 function cancelAuto(restoreMsg = true) {
   if (smartTimer) clearInterval(smartTimer); smartTimer = null;
   if (engine) engine.decks.forEach(d => d.delaySend.gain.setTargetAtTime(0, engine.ctx.currentTime, 0.08));
@@ -240,9 +261,45 @@ function freezeExpressive(reason) {
   twoBanner(''); twoStatus(`${reason} Valores congelados sin saltos; control manual activo.`);
 }
 $('#btnTwoConfirm').onclick = () => { $('#btnTwoConfirm').disabled = true; confirmTwoHand(); };
-$('#btnTwoCancel').onclick = () => { cancelAuto(); freezeExpressive('Cancelado por el usuario.'); two.reset(); $('#btnTwoConfirm').disabled = true; };
+$('#btnTwoCancel').onclick = () => { cancelAuto(); autoDjTimerBusy = false; freezeExpressive('Cancelado por el usuario.'); two.reset(); $('#btnTwoConfirm').disabled = true; };
 $('#twoEnabled').onchange = e => { if (!e.target.checked) { two.reset(); freezeExpressive('Dos manos desactivado.'); cancelAuto(false); twoBanner(''); } twoStatus(e.target.checked ? 'Activado. Mantén pinza con AMBAS manos 1 s para preparar (no se activa bailando ni con una mano).' : 'Desactivado.'); };
+$('#autoDjEnabled').onchange = () => { autoDjLastKey = null; const p = autoDjPlanNow(); autoDjRender(p); if ($('#autoDjEnabled').checked) $('#autoDjStatus').textContent = p.reason; };
+$('#autoDjAnt').oninput = () => { $('#autoDjAntVal').textContent = $('#autoDjAnt').value; };
+$('#btnAutoDjNow').onclick = () => { if (!$('#autoDjEnabled').checked) { $('#autoDjStatus').textContent = 'Activa Auto DJ primero; la transicion a pedido no arranca sola.'; return; } const p = autoDjPlanNow(); if (startAutoDjTransition(p, 'Transicion a pedido')) autoDjLastKey = autoDjTriggerKey(p, decks.map(d => d.track?.id)); else autoDjRender(p); };
+$('#btnAutoDjCancel').onclick = () => cancelAutoDj();
+let fxSelection = createEffectSelection();
+function fxRender() { const fx = effectById(fxSelection.effectId); $('#fxName').textContent = fx.label; $('#fxDeckA').setAttribute('aria-pressed', fxSelection.deck === 0); $('#fxDeckB').setAttribute('aria-pressed', fxSelection.deck === 1); let val = '—'; if (fx.id === 'delay') val = engine ? Math.round(engine.decks[fxSelection.deck].delaySend.gain.value / 0.8 * 100) + '%' : '0%'; else { const inp = document.querySelector(`[data-param="${fx.targetParam}"][data-deck="${fxSelection.deck}"]`); val = inp ? inp.value + fx.unit : '—'; } $('#fxValue').textContent = `Intensidad actual: ${val}`; $('#fxStatus').textContent = `Efecto seleccionado: ${fx.label} · Deck ${'AB'[fxSelection.deck]}. Sin efecto en el audio por ahora (solo seleccion).`; }
+$('#fxEnabled').onchange = e => { $('#fxPanel').hidden = !e.target.checked; if (e.target.checked) fxRender(); };
+$('#fxPrev').onclick = () => { fxSelection = cycleEffect(fxSelection, -1); fxRender(); };
+$('#fxNext').onclick = () => { fxSelection = cycleEffect(fxSelection, 1); fxRender(); };
+$('#fxDeckA').onclick = () => { fxSelection = { ...fxSelection, deck: 0 }; fxRender(); };
+$('#fxDeckB').onclick = () => { fxSelection = { ...fxSelection, deck: 1 }; fxRender(); };
 // Compatibilidad: la antigua smartTo queda sustituida por startAutoTransition.
+// ---------- Garra de cinco dedos (experimental, desactivada por defecto) ----------
+const claw = new ClawController({ engageMs: 500 });
+let clawHand = -1;
+const CLAW_PARAMS = { filter: { min: -50, max: 50, label: 'Filtro' }, low: { min: -24, max: 24, label: 'Graves LOW' }, delay: { min: 0, max: 0.8, label: 'Delay (envio del deck)' } };
+function clawParamInput() { return document.querySelector(`[data-param="${$('#clawParam').value}"][data-deck="${$('#clawDeck').value}"]`); }
+function clawCurrentValue() {
+  const p = $('#clawParam').value, i = Number($('#clawDeck').value);
+  if (p === 'delay') return engine ? engine.decks[i].delaySend.gain.value : 0;
+  return Number(clawParamInput()?.value || 0);
+}
+function clawReprime() { claw.setValue(clawCurrentValue()); }
+function applyClawValue(v) {
+  const p = $('#clawParam').value, i = Number($('#clawDeck').value);
+  if (p === 'delay') { if (engine) engine.decks[i].delaySend.gain.setTargetAtTime(v, engine.ctx.currentTime, 0.05); }
+  else { const inp = clawParamInput(); if (inp) { inp.value = v; setParam(inp); } }
+  $('#clawVal').textContent = `${CLAW_PARAMS[p].label} ${'AB'[i]}: ${p === 'delay' ? Math.round(v / 0.8 * 100) + '%' : Math.round(v)}`;
+}
+['clawDeck', 'clawParam'].forEach(id => $('#' + id).addEventListener('change', clawReprime));
+function setClawEnabled(on) {
+  $('#clawEnabled').checked = on; claw.reset(); clawHand = -1;
+  if (on) clawReprime();
+  $('#clawStatus').textContent = on ? 'Garra activa: deja una mano visible sin pinza 0,5 s para enganchar. La pinza y las dos manos tienen prioridad.' : 'Garra desactivada. El parametro conserva su valor y el control manual sigue activo.';
+}
+$('#clawEnabled').onchange = e => setClawEnabled(e.target.checked);
+$('#btnClawOff').onclick = () => setClawEnabled(false);
 $('#btnRecord').onclick = e => {
   ensureEngine();
   if (recorder) { recorder.stop(); return; }
@@ -263,31 +320,101 @@ function rebuildRegistry() {
     const r = el.getBoundingClientRect();
     if (!r.width) return;
     if (!el._gid) el._gid = `ctl-${idx}-${el.dataset.param || el.dataset.act || el.className}`;
-    const base = { x: r.left - sr.left, y: r.top - sr.top, w: r.width, h: r.height };
+    const base = stageLocal(el);
     registry.register(el._gid, el.classList.contains('wave') ? base : expandRect(base, pad), { el, z: el.classList.contains('wave') ? 0 : 1 });
   });
 }
-function coverPoint(lm) {
-  const sr = stage.getBoundingClientRect();
-  const p = mapCoverPoint(lm, video.videoWidth || 1280, video.videoHeight || 720, sr.width, sr.height, mirrored);
-  return { ...p, sr };
-}
+let frameFit = 'fill'; // RECORTE es el modo principal siempre; COMPLETO es una alternativa de sesion
+function effectiveFit() { return fitFromObjectFit(getComputedStyle(video).objectFit); } // el mapeo sigue a lo que el video realmente muestra
+function applyFrame() { stage.dataset.frame = frameFit === 'fill' ? 'fill' : 'contain'; video.style.objectFit = frameFit === 'fill' ? 'cover' : 'contain'; const b = $('#btnFrame'); b.textContent = frameFit === 'fill' ? 'Encuadre: RECORTE (llena)' : 'Encuadre: COMPLETO'; b.setAttribute('aria-pressed', frameFit === 'fill'); b.title = frameFit === 'fill' ? 'Recorte: llena el area cortando bordes; pueden salir manos/cabeza.' : 'Completo: se ve toda la camara sin deformar; el espacio libre se integra al fondo.'; localStorage.setItem('motiondj-frame-v2', frameFit); hands.forEach(h => { h.smoothX.reset(); h.smoothY.reset(); }); }
+function stageLocal(el) { const sr = stage.getBoundingClientRect(), r = el.getBoundingClientRect(); return { x: r.left - sr.left - stage.clientLeft, y: r.top - sr.top - stage.clientTop, w: r.width, h: r.height }; }
+function videoBox() { const sr = stage.getBoundingClientRect(), vr = video.getBoundingClientRect(); return { x: vr.left - sr.left - stage.clientLeft, y: vr.top - sr.top - stage.clientTop, w: vr.width, h: vr.height }; }
+function mappingInfo() { const tr = video.srcObject?.getVideoTracks?.()[0]?.getSettings?.() || {}; const box = videoBox(); const cs = getComputedStyle(video); const fit = effectiveFit(); const win = visibleVideoWindow(video.videoWidth || 1280, video.videoHeight || 720, box.w, box.h, fit, parseObjectPosition(cs.objectPosition)); const sync = (fit === 'cover') === (frameFit === 'fill') ? 'ok' : 'DESYNC'; return `video ${video.videoWidth || '?'}x${video.videoHeight || '?'} pista ${tr.width || '?'}x${tr.height || '?'} caja ${Math.round(box.w)}x${Math.round(box.h)} object-fit:${cs.objectFit} mapeo:${fit} (${sync}) ${mirrored ? 'ESPEJO' : 'NORMAL'} visible u:${win.u0.toFixed(2)}-${win.u1.toFixed(2)} v:${win.v0.toFixed(2)}-${win.v1.toFixed(2)}`; }
+function coverPoint(lm) { const box = videoBox(); const cs = getComputedStyle(video); const p = mapVideoPointInBox(lm, video.videoWidth || 1280, video.videoHeight || 720, box, mirrored, effectiveFit(), parseObjectPosition(cs.objectPosition)); return { ...p, sr: stage.getBoundingClientRect() }; }
+
 function controlLabel(el) {
   if (!el) return '—';
   if (el.dataset.param) return `${el.dataset.param.toUpperCase()} ${el.dataset.deck !== undefined ? 'AB'[el.dataset.deck] : ''}`.trim();
   if (el.classList.contains('wave')) return 'ONDA (pinza = seek)';
   return (el.textContent || el.className).trim().slice(0, 22);
 }
-function setRangeFromPoint(el, x) {
+function setRangeFromPoint(el, x, y) {
   const r = el.getBoundingClientRect(), sr = stage.getBoundingClientRect();
-  const frac = clamp((x - (r.left - sr.left)) / r.width);
+  const frac = el.dataset.orient === 'v' ? clamp(1 - (y - (r.top - sr.top - stage.clientTop)) / r.height) : clamp((x - (r.left - sr.left - stage.clientLeft)) / r.width);
   el.value = Number(el.min) + frac * (Number(el.max) - Number(el.min));
   el.dispatchEvent(new Event('input', { bubbles: true }));
 }
+// ---------- Perilla piloto (LOW deck A): arrastre relativo anclado ----------
+let knobDrag = null, knobBarTimer = null;
+function knobInput(knob) { return knob?.closest('.knobwrap')?.querySelector('.knob-state') || null; }
+function knobPx() { return Number($('#calKnob')?.value || 220); }
+function syncKnob(knob) {
+  const inp = knobInput(knob); if (!inp) return;
+  const v = Number(inp.value), mn = Number(inp.min), mx = Number(inp.max), f = mx > mn ? (v - mn) / (mx - mn) : 0;
+  knob.style.setProperty('--ang', knobAngle(v, mn, mx) + 'deg');
+  knob.style.setProperty('--frac', f);
+  if (knobDrag?.knob === knob) showKnobBar(inp, knob, true);
+}
+function syncAllKnobs() { document.querySelectorAll('.knob').forEach(syncKnob); }
+function showKnobBar(inp, knob, keep) {
+  const bar = $('#knobBar'); bar.hidden = false;
+  const v = Number(inp.value), mn = Number(inp.min), mx = Number(inp.max), f = mx > mn ? (v - mn) / (mx - mn) : 0;
+  $('#knobBarLabel').textContent = `${(inp.dataset.param || '').toUpperCase()} · DECK ${'AB'[Number(inp.dataset.deck || 0)]}`;
+  $('#knobBarVal').textContent = `${v > 0 ? '+' : ''}${v} dB`;
+  $('#knobBarFill').style.width = `${f * 100}%`;
+  $('#knobBarDot').style.left = `${f * 100}%`;
+  bar.style.borderColor = Number(inp.dataset.deck) === 1 ? 'var(--b)' : 'var(--a)';
+  if (!keep && knobBarTimer) { clearTimeout(knobBarTimer); knobBarTimer = null; }
+}
+function hideKnobBarSoon() {
+  if (knobBarTimer) clearTimeout(knobBarTimer);
+  knobBarTimer = setTimeout(() => { if (!knobDrag) $('#knobBar').hidden = true; knobBarTimer = null; }, 700);
+}
+function startKnobDrag(knob, x, hand) {
+  const inp = knobInput(knob); if (!inp) return false;
+  knobDrag = { knob, input: inp, hand, startValue: Number(inp.value), startX: x };
+  showKnobBar(inp, knob);
+  return true;
+}
+function moveKnobDrag(x) {
+  if (!knobDrag) return;
+  const inp = knobDrag.input;
+  inp.value = knobDragValue(knobDrag.startValue, x - knobDrag.startX, Number(inp.min), Number(inp.max), knobPx());
+  inp.dispatchEvent(new Event('input', { bubbles: true }));
+  syncKnob(knobDrag.knob);
+}
+function endKnobDrag() { if (!knobDrag) return; knobDrag = null; hideKnobBarSoon(); }
+document.querySelectorAll('.knob').forEach(knob => {
+  const inp = knobInput(knob);
+  knob.addEventListener('pointerdown', e => { e.preventDefault(); knob.focus(); knob.setPointerCapture(e.pointerId); startKnobDrag(knob, e.clientX, 'mouse'); });
+  knob.addEventListener('pointermove', e => { if (knobDrag?.knob === knob && knobDrag.hand === 'mouse') moveKnobDrag(e.clientX); });
+  knob.addEventListener('pointerup', () => endKnobDrag());
+  knob.addEventListener('pointercancel', () => endKnobDrag());
+  knob.addEventListener('focus', () => { if (inp) showKnobBar(inp, knob); });
+  knob.addEventListener('blur', () => hideKnobBarSoon());
+  knob.addEventListener('keydown', e => {
+    if (!inp) return;
+    const step = Number(inp.step || 0.5), v = Number(inp.value);
+    let nv = null;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') nv = v + step;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') nv = v - step;
+    if (e.key === 'PageUp') nv = v + step * 4;
+    if (e.key === 'PageDown') nv = v - step * 4;
+    if (e.key === 'Home') nv = Number(inp.min);
+    if (e.key === 'End') nv = Number(inp.max);
+    if (nv !== null) { e.preventDefault(); inp.value = Math.min(Number(inp.max), Math.max(Number(inp.min), nv)); inp.dispatchEvent(new Event('input', { bubbles: true })); showKnobBar(inp, knob); syncKnob(knob); }
+  });
+});
+$('#knobTrack').addEventListener('pointerdown', e => {
+  const knob = document.querySelector('.knob'); const inp = knob && knobInput(knob); if (!inp) return;
+  const r = e.currentTarget.getBoundingClientRect(), f = clamp((e.clientX - r.left) / r.width);
+  inp.value = Number(inp.min) + f * (Number(inp.max) - Number(inp.min));
+  inp.dispatchEvent(new Event('input', { bubbles: true })); syncKnob(knob);
+});
 function triggerEl(el, x) {
   if (el.classList.contains('wave')) {
     const deckEl = el.closest('.deck'), i = decks.findIndex(d => d.el === deckEl), r = el.getBoundingClientRect(), sr = stage.getBoundingClientRect();
-    if (engine && decks[i].track) engine.decks[i].seek(clamp((x - (r.left - sr.left)) / r.width) * decks[i].track.buffer.duration);
+    if (engine && decks[i].track) engine.decks[i].seek(clamp((x - (r.left - sr.left - stage.clientLeft)) / r.width) * decks[i].track.buffer.duration);
     return;
   }
   if (el.classList.contains('pad')) { const deckEl = el.closest('.deck'); padAction(decks.findIndex(d => d.el === deckEl), Number(el.dataset.pad), el); }
@@ -295,7 +422,7 @@ function triggerEl(el, x) {
 }
 async function enableCamera() {
   try {
-    await startCamera(video); $('#noCam').style.display = 'none';
+    await startCamera(video); $('#noCam').style.display = 'none'; $('#chipCam').textContent = 'Cámara: activa'; $('#chipCam').classList.add('on');
     status('Cámara activa. Cargando modelo de manos (primera vez requiere internet)…');
     tracker = await createHandTracker(video, () => status('MediaPipe no pudo cargar. Revisa internet la primera vez; mouse/teclado siguen activos.'));
     status(tracker ? 'Manos listas. Activa Gestos y haz una pinza sobre un control.' : 'Sin tracker de manos; mouse/teclado activos.');
@@ -307,13 +434,16 @@ function applyMirror() {
   const b = $('#btnMirror'); b.textContent = `Cámara: ${mirrored ? 'ESPEJO' : 'NORMAL'}`; b.setAttribute('aria-pressed', mirrored);
   localStorage.setItem('motiondj-mirror', mirrored ? '1' : '0');
 }
-mirrored = localStorage.getItem('motiondj-mirror') !== '0'; applyMirror();
+mirrored = localStorage.getItem('motiondj-mirror') !== '0'; applyMirror(); applyFrame();
+$('#btnFrame').onclick = () => { frameFit = frameFit === 'fill' ? 'contain' : 'fill'; applyFrame(); status(frameFit === 'fill' ? 'Encuadre RECORTE: llena la pantalla cortando bordes.' : 'Encuadre COMPLETO: se ve toda la camara sin recorte ni deformacion.'); };
+window.addEventListener('resize', () => { hands.forEach(h => { h.smoothX.reset(); h.smoothY.reset(); }); rebuildRegistry(); });
 $('#btnMirror').onclick = () => { mirrored = !mirrored; applyMirror(); hands.forEach(h => { h.smoothX.reset(); h.smoothY.reset(); }); status(mirrored ? 'Modo ESPEJO: te mueves como frente a un espejo.' : 'Modo NORMAL: la imagen no se invierte; el cursor sigue a tu dedo igualmente.'); };
 $('#btnGestures').onclick = e => {
   gesturesOn = !gesturesOn; e.target.textContent = gesturesOn ? 'Gestos: ACTIVOS (pausar)' : 'Gestos: PAUSADOS'; e.target.setAttribute('aria-pressed', gesturesOn);
   $('#gesturePaused').style.display = gesturesOn ? 'none' : 'block';
+  $('#chipGest').textContent = gesturesOn ? 'Gestos: activos' : 'Gestos: pausados'; $('#chipGest').classList.toggle('on', gesturesOn);
   hands.forEach(h => { h.needRelease = true; h.pinch.reset(); });
-  if (!gesturesOn) { registry.releaseAll(); two.reset(); freezeExpressive('Gestos pausados.'); document.querySelectorAll('[data-focus]').forEach(el => el.removeAttribute('data-focus')); $('#focusTag').hidden = true; }
+  if (!gesturesOn) { registry.releaseAll(); endKnobDrag(); two.reset(); freezeExpressive('Gestos pausados.'); document.querySelectorAll('[data-focus]').forEach(el => el.removeAttribute('data-focus')); $('#focusTag').hidden = true; }
 };
 $('#btnDiag').onclick = e => { diag = !diag; e.target.setAttribute('aria-pressed', diag); if (!diag) overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height); };
 $('#btnGuide').onclick = () => $('#guide').scrollIntoView({ behavior: 'smooth' });
@@ -323,6 +453,7 @@ document.addEventListener('keydown', e => {
   if (k === 'q') deckAction(0, 'play'); if (k === 'a') deckAction(0, 'cue', decks[0].el.querySelector('.cue'));
   if (k === 'p') deckAction(1, 'play'); if (k === 'l') deckAction(1, 'cue', decks[1].el.querySelector('.cue'));
   if (k === 'g') $('#btnGestures').click();
+  if (k === 'c' && $('#clawEnabled').checked) setClawEnabled(false);
   if (k === 'arrowleft' || k === 'arrowright') { const c = $('#cross'); c.value = clamp(Number(c.value) + (k === 'arrowright' ? 0.08 : -0.08), -1, 1); c.dispatchEvent(new Event('input', { bubbles: true })); }
 });
 // ---------- Bucle principal ----------
@@ -337,15 +468,29 @@ function loop() {
     });
     const ml = engine.masterLevel(), mm = $('#masterMeter'); if (mm) mm.style.width = `${Math.min(100, ml * 100)}%`;
     $('#clipWarn').hidden = ml < 0.98;
-    refreshTransport();
+    refreshTransport(); syncAllKnobs(); if (performance.now() - autoDjLastCheck > 250) { autoDjLastCheck = performance.now(); checkAutoDj(autoDjLastCheck); if (!$('#fxPanel').hidden) fxRender(); }
   }
   if (!gesturesOn || !tracker) { hands.forEach((h, i) => { const c = $(`#handCursor${i}`); if (c) c.style.display = 'none'; }); return; }
   const res = tracker.detect(); rebuildRegistry();
   const ctx = overlay.getContext('2d'); overlay.width = stage.clientWidth; overlay.height = stage.clientHeight; ctx.clearRect(0, 0, overlay.width, overlay.height);
   const lms = res?.landmarks || [], now = performance.now();
+  const stageKey = stage.clientWidth + 'x' + stage.clientHeight;
+  if (stageKey !== loop._stageKey) { loop._stageKey = stageKey; hands.forEach(h => { h.smoothX.reset(); h.smoothY.reset(); }); }
+  if (diag) {
+    // Rejilla de calibracion: cruces en coordenadas normalizadas conocidas.
+    // Deben caer sobre tu mano/dedo en esa posicion de la imagen de camara.
+    ctx.strokeStyle = 'rgba(250,204,21,.85)'; ctx.fillStyle = '#facc15'; ctx.font = '11px sans-serif';
+    for (const u of [0, 0.25, 0.5, 0.75, 1]) for (const v of [0, 0.25, 0.5, 0.75, 1]) {
+      const pt = coverPoint({ x: u, y: v });
+      if (pt.x < -20 || pt.y < -20 || pt.x > stage.clientWidth + 20 || pt.y > stage.clientHeight + 20) continue;
+      ctx.beginPath(); ctx.moveTo(pt.x - 7, pt.y); ctx.lineTo(pt.x + 7, pt.y); ctx.moveTo(pt.x, pt.y - 7); ctx.lineTo(pt.x, pt.y + 7); ctx.stroke();
+      if (u === 0 || u === 1 || v === 0 || v === 1) ctx.fillText(u + ',' + v, pt.x + 8, pt.y - 4);
+    }
+    ctx.fillStyle = '#fff'; ctx.fillText(mappingInfo(), 10, stage.clientHeight - 10);
+  }
   const pts = hands.map((h, hi) => {
     const lm = lms[hi], cursor = $(`#handCursor${hi}`);
-    if (!lm) { if (h.seen && now - h.seen > 250) { registry.release(hi); h.pinch.reset(); h.needRelease = true; } cursor.style.display = 'none'; return null; }
+    if (!lm) { if (h.seen && now - h.seen > 250) { registry.release(hi); h.pinch.reset(); h.needRelease = true; if (knobDrag?.hand === hi) endKnobDrag(); } cursor.style.display = 'none'; return null; }
     h.seen = now;
     const tip = coverPoint(lm[8]), x = h.smoothX.update(tip.x), y = h.smoothY.update(tip.y);
     h.pinch.on = Number($('#calSens').value); h.pinch.off = h.pinch.on + 0.14;
@@ -358,7 +503,7 @@ function loop() {
   let twoBusy = false;
   if (twoOn && pts[0] && pts[1]) {
     const bothPinched = pts.every(p => p.det.pinched), ev = two.update({ bothPinched, bothPresent: true }, now);
-    if (bothPinched) { registry.releaseAll(); twoBusy = true; }
+    if (bothPinched) { registry.releaseAll(); endKnobDrag(); twoBusy = true; }
     if (ev.event === 'prepared') { const t = Number($('#twoTarget').value); twoBanner(`Transición «Mezcla suave» hacia ${t === 1 ? 'B' : 'A'} PREPARADA: crossfader + graves + eco (${$('#twoDuration').value / 1000}s). Suelta ambas manos y confirma con el botón o una segunda pinza doble.`); twoStatus('Preparada. Esperando confirmación explícita.'); $('#btnTwoConfirm').disabled = false; }
     if (ev.event === 'armed') twoStatus('Lista: pulsa Confirmar o haz pinza con ambas manos para iniciar.');
     if (ev.event === 'confirmed') { $('#btnTwoConfirm').disabled = true; confirmTwoHand(); }
@@ -371,6 +516,22 @@ function loop() {
       $('#twoFilter').style.width = `${(vals.filter + 50)}%`; $('#twoFilterVal').textContent = `${Math.round(vals.filter)}`;
     }
   } else if (twoOn) { const ev = two.update({ bothPinched: false, bothPresent: false }, now); if (ev.event === 'freeze') freezeExpressive('Se perdió una mano.'); }
+  // --- Garra: una mano sin pinza; cede ante pinza, dos manos y transicion ---
+  clawHand = -1;
+  const gate = clawGate({ enabled: $('#clawEnabled').checked, handCount: pts.filter(Boolean).length, anyPinched: pts.some(p => p?.det.pinched), anyGrabbed: !!registry.grabbedBy(0) || !!registry.grabbedBy(1), twoHandBusy: twoBusy, expressiveActive, autoTransition: !!smartTimer });
+  if (!gate.run && $('#clawEnabled').checked && claw.engaged) { claw.update(null, now, { min: 0, max: 1, sensitivity: 1, invert: false, rangeMin01: 0, rangeMax01: 1 }); $('#clawStatus').textContent = `Garra soltada (${gate.reason}). Valor conservado; pinza y dos manos libres.`; }
+  if (gate.run) {
+    const hi = pts.findIndex(p => p);
+    if (hi >= 0) {
+      claw.prime(clawCurrentValue());
+      const spec = CLAW_PARAMS[$('#clawParam').value];
+      const r = claw.update({ aperture01: aperture01(pts[hi].lm), pinched: pts[hi].det.pinched }, now, { min: spec.min, max: spec.max, sensitivity: Number($('#clawSens').value), invert: $('#clawInvert').checked, rangeMin01: clamp(Number($('#clawMin').value || 0) / 100), rangeMax01: clamp(Number($('#clawMax').value || 100) / 100) });
+      $('#clawBar').style.width = `${aperture01(pts[hi].lm) * 100}%`;
+      if (r.engaged) { clawHand = hi; applyClawValue(r.value); $('#clawStatus').textContent = `Garra ENGANCHADA (mano ${hi}): abre/cierra para mover ${spec.label} del deck ${'AB'[Number($('#clawDeck').value)]}. Haz pinza para soltarla.`; }
+      else if (r.event === 'released') $('#clawStatus').textContent = 'Garra soltada. Valor conservado; control manual activo.';
+      else $('#clawStatus').textContent = 'Garra: mano detectada, esperando enganche (0,5 s sin pinza)…';
+    } else { claw.update(null, now, { min: 0, max: 1, sensitivity: 1, invert: false, rangeMin01: 0, rangeMax01: 1 }); $('#clawStatus').textContent = 'Garra: sin mano. Valor conservado.'; }
+  }
   // --- Mano individual: foco visible antes de pinzar ---
   document.querySelectorAll('[data-focus]').forEach(el => el.removeAttribute('data-focus'));
   document.querySelectorAll('[data-grabbed]').forEach(el => el.removeAttribute('data-grabbed'));
@@ -380,13 +541,13 @@ function loop() {
     const hit = registry.hit(p.x, p.y);
     if (hit && !p.det.pinched) { hit.el.setAttribute('data-focus', '1'); focusLabel = controlLabel(hit.el); $(`#handCursor${hi}`).querySelector('span').textContent = focusLabel; }
     else $(`#handCursor${hi}`).querySelector('span').textContent = p.det.pinched ? 'TOMADO' : '';
-    if (twoBusy || expressiveActive) return;
+    if (twoBusy || expressiveActive || hi === clawHand) return;
     const grabbedId = registry.grabbedBy(hi);
-    if (grabbedId) { const c = registry.controls.get(grabbedId); if (c?.el?.dataset.g === 'range') setRangeFromPoint(c.el, p.x); if (c) c.el.setAttribute('data-grabbed', '1'); }
+    if (grabbedId) { const c = registry.controls.get(grabbedId); if (c?.el?.dataset.g === 'range') setRangeFromPoint(c.el, p.x, p.y); if (c?.el?.dataset.g === 'knob' && knobDrag?.hand === hi) moveKnobDrag(p.x); if (c) c.el.setAttribute('data-grabbed', '1'); }
     if (p.det.started && !h.needRelease && hit) {
-      if (hit.el.dataset.g === 'range') { if (registry.grab(hi, hit.id)) setRangeFromPoint(hit.el, p.x); } else triggerEl(hit.el, p.x);
+      if (hit.el.dataset.g === 'range') { if (registry.grab(hi, hit.id)) setRangeFromPoint(hit.el, p.x, p.y); } else if (hit.el.dataset.g === 'knob') { if (registry.grab(hi, hit.id)) startKnobDrag(hit.el, p.x, hi); } else triggerEl(hit.el, p.x);
     }
-    if (p.det.ended) { registry.release(hi); h.needRelease = false; }
+    if (p.det.ended) { registry.release(hi); h.needRelease = false; if (knobDrag?.hand === hi) endKnobDrag(); }
     if (diag) {
       ctx.fillStyle = hi ? '#f472b6' : '#22d3ee';
       p.lm.forEach(pt0 => { const pt = coverPoint(pt0); ctx.fillRect(pt.x - 2, pt.y - 2, 4, 4); });
@@ -395,5 +556,7 @@ function loop() {
     }
   });
   const ft = $('#focusTag'); ft.hidden = !focusLabel; ft.textContent = focusLabel ? `Enfocado: ${focusLabel} — haz pinza para tomarlo` : '';
+  $('#chipFocus').textContent = `Foco: ${focusLabel || '—'}`;
+  $('#stateDetail').textContent = `Cámara: ${video.srcObject ? 'activa' : 'apagada'} (${mirrored ? 'espejo' : 'normal'}) · Gestos: ${gesturesOn ? 'activos' : 'pausados'} · Foco: ${focusLabel || '—'} · Garra: ${$('#clawEnabled').checked ? (clawHand >= 0 ? 'enganchada' : 'activa sin enganchar') : 'desactivada'} · Dos manos: ${two.state}`;
 }
 loop();

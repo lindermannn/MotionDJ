@@ -65,17 +65,85 @@ export function knobValue(control, y, current) {
   // Arrastre vertical: subir el dedo sube el valor
   return clamp(current - y * 1.6);
 }
+// Perilla con arrastre horizontal relativo: empieza en el valor actual
+// (dx=0 => sin salto) y recorre el rango completo en pxFull pixeles.
+export function knobDragValue(startValue, dxPx, min, max, pxFull = 220) {
+  const px = pxFull > 0 ? pxFull : 220;
+  return clamp(startValue + (dxPx / px) * (max - min), min, max);
+}
+// Angulo de la aguja de una perilla: -135° (min) .. +135° (max).
+export function knobAngle(value, min, max) {
+  const f = max > min ? clamp((value - min) / (max - min)) : 0;
+  return -135 + f * 270;
+}
 // Amplia una zona de interaccion y garantiza un tamano minimo (44px recomendado).
 export function expandRect(r, pad = 14, minW = 44, minH = 40) {
   const w = Math.max(r.w + pad * 2, minW), h = Math.max(r.h + pad * 2, minH);
   return { x: r.x + r.w / 2 - w / 2, y: r.y + r.h / 2 - h / 2, w, h };
 }
-// Convierte un landmark a coordenadas del escenario corrigiendo espejo y
-// recorte object-fit:cover. mirrored=true: la imagen se ve como un espejo.
-export function mapCoverPoint(lm, vw, vh, stageW, stageH, mirrored = true) {
-  const sc = Math.max(stageW / vw, stageH / vh), dw = vw * sc, dh = vh * sc;
+// Rectangulo del contenido del video dentro de una caja (la del elemento
+// <video>), segun object-fit y object-position (fracciones 0..1, def. centro).
+// Sin deformar: escala uniforme; en 'cover' el rectangulo excede la caja.
+export function videoContentRect(vw, vh, boxW, boxH, fit = 'contain', pos = { x: 0.5, y: 0.5 }) {
+  const safeW = vw > 0 ? vw : 1280, safeH = vh > 0 ? vh : 720;
+  const sc = fit === 'cover' ? Math.max(boxW / safeW, boxH / safeH) : Math.min(boxW / safeW, boxH / safeH);
+  const w = safeW * sc, h = safeH * sc;
+  return { x: (boxW - w) * (pos?.x ?? 0.5) + 0, y: (boxH - h) * (pos?.y ?? 0.5) + 0, w, h };
+}
+// Ajuste efectivo a partir del object-fit REALMENTE aplicado al video.
+// El mapeo usa siempre este valor (leido del estilo computado), para que
+// puntero y video no puedan desincronizarse aunque difieran el estado JS,
+// la hoja de estilos o el atributo data-* del escenario.
+export function fitFromObjectFit(objectFit) {
+  return objectFit === 'cover' ? 'cover' : 'contain';
+}
+// Interpreta el object-position calculado ('50% 50%', 'left top', ...).
+export function parseObjectPosition(str) {
+  const kw = { left: 0, top: 0, center: 0.5, right: 1, bottom: 1 };
+  const t = String(str || '50% 50%').trim().split(/\s+/);
+  const val = (tok, isX) => {
+    if (tok === undefined) return 0.5;
+    if (tok.endsWith('%')) return clamp(parseFloat(tok) / 100);
+    if (tok in kw) return kw[tok];
+    const n = parseFloat(tok); return Number.isFinite(n) ? n : 0.5;
+  };
+  // Palabras clave verticales/horizontales pueden venir en cualquier orden.
+  let xTok = t[0], yTok = t[1];
+  if (t[0] === 'top' || t[0] === 'bottom') { yTok = t[0]; xTok = t[1] ?? 'center'; }
+  if (t[1] === 'left' || t[1] === 'right') { xTok = t[1]; yTok = t[0]; }
+  return { x: val(xTok, true), y: val(yTok, false) };
+}
+// Convierte un landmark a coordenadas de una caja en (0,0), corrigiendo
+// espejo y ajuste. fit='contain': imagen completa, con bandas.
+// fit='cover': llena el area recortando.
+export function mapVideoPoint(lm, vw, vh, stageW, stageH, mirrored = true, fit = 'contain', pos = { x: 0.5, y: 0.5 }) {
+  const r = videoContentRect(vw, vh, stageW, stageH, fit, pos);
   const nx = mirrored ? 1 - lm.x : lm.x;
-  return { x: nx * dw + (stageW - dw) / 2, y: lm.y * dh + (stageH - dh) / 2 };
+  return { x: r.x + nx * r.w, y: r.y + lm.y * r.h };
+}
+// Igual, pero la caja del video esta desplazada (box = rectangulo REAL del
+// elemento <video> en coordenadas del escenario). Es la via que usa la app:
+// no supone que el video mida lo mismo que el escenario.
+export function mapVideoPointInBox(lm, vw, vh, box, mirrored = true, fit = 'contain', pos = { x: 0.5, y: 0.5 }) {
+  const p = mapVideoPoint(lm, vw, vh, box.w, box.h, mirrored, fit, pos);
+  return { x: box.x + p.x, y: box.y + p.y };
+}
+// Ventana normalizada de la fuente que realmente se ve en la caja.
+// En contain es toda; en cover es el recorte efectivo.
+export function visibleVideoWindow(vw, vh, boxW, boxH, fit = 'contain', pos = { x: 0.5, y: 0.5 }) {
+  const r = videoContentRect(vw, vh, boxW, boxH, fit, pos);
+  return {
+    u0: clamp(-r.x / r.w), v0: clamp(-r.y / r.h),
+    u1: clamp((boxW - r.x) / r.w), v1: clamp((boxH - r.y) / r.h)
+  };
+}
+// Compatibilidad: nombre anterior, equivalente a fit='cover'.
+export function mapCoverPoint(lm, vw, vh, stageW, stageH, mirrored = true) {
+  return mapVideoPoint(lm, vw, vh, stageW, stageH, mirrored, 'cover');
+}
+// Rectangulo del contenido del video dentro del escenario (diagnostico).
+export function videoViewport(vw, vh, stageW, stageH, fit = 'contain', pos = { x: 0.5, y: 0.5 }) {
+  return videoContentRect(vw, vh, stageW, stageH, fit, pos);
 }
 export function handsDistance(p0, p1, stageW) {
   return clamp(Math.hypot(p0.x - p1.x, p0.y - p1.y) / (stageW * 0.6));
@@ -87,14 +155,14 @@ export function handsDistance(p0, p1, stageW) {
 export class TwoHandSession {
   constructor({ holdMs = 700, lossMs = 300 } = {}) {
     this.holdMs = holdMs; this.lossMs = lossMs;
-    this.state = 'idle'; this._since = 0; this._lostSince = 0;
+    this.state = 'idle'; this._since = null; this._lostSince = 0;
   }
-  reset() { this.state = 'idle'; this._since = 0; this._lostSince = 0; }
+  reset() { this.state = 'idle'; this._since = null; this._lostSince = 0; }
   update({ bothPinched, bothPresent }, now) {
     let event = null;
     if (this.state === 'idle') {
-      if (bothPinched) { if (!this._since) this._since = now; if (now - this._since >= this.holdMs) { this.state = 'prepared'; event = 'prepared'; this._since = 0; } }
-      else this._since = 0;
+      if (bothPinched) { if (this._since === null) this._since = now; if (now - this._since >= this.holdMs) { this.state = 'prepared'; event = 'prepared'; this._since = null; } }
+      else this._since = null;
     } else if (this.state === 'prepared') {
       if (!bothPinched && bothPresent) { this.state = 'armed'; event = 'armed'; }
     } else if (this.state === 'armed') {
