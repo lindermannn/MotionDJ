@@ -1,0 +1,20 @@
+{
+  "name": "motiondj",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Controladora DJ web controlada por gestos con MediaPipe y Web Audio",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4173",
+    "test": "node --test tests/logic.test.js",
+    "gen:audio": "node tools/generate-demo-audio.mjs"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^0.10.14"
+  },
+  "devDependencies": {
+    "vite": "^5.4.8"
+  }
+}

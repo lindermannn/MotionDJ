@@ -1,0 +1,11 @@
+node_modules/
+.npm-cache/
+dist/
+*.log
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx

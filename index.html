@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MotionDJ — Controladora por gestos</title>
+<link rel="stylesheet" href="/src/styles/main.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="brand-mark">M</span><div><strong>MotionDJ</strong><small>Control por manos · Web Audio · Local</small></div></div>
+  <div class="top-actions">
+    <button id="btnGuide" class="btn">Inicio guiado</button>
+    <button id="btnGestures" class="btn warn" aria-pressed="false">Gestos: OFF</button>
+    <button id="btnDiag" class="btn" aria-pressed="false">Diagnóstico</button>
+    <button id="btnRecord" class="btn">● Grabar mezcla</button>
+    <span id="clipWarn" class="clip" hidden>SATURACIÓN</span>
+  </div>
+</header>
+
+<section id="guide" class="guide">
+  <ol>
+    <li><button class="btn small" id="gAudio">1. Activar audio</button></li>
+    <li>2. Carga las demos o importa tu música en la biblioteca</li>
+    <li><button class="btn small" id="gCamera">3. Activar cámara</button></li>
+    <li>4. Calibra la mesa y bloquea</li>
+    <li>5. Pinza pulgar+índice para tomar un control</li>
+  </ol>
+  <p class="privacy">La cámara y el audio se procesan <strong>localmente en tu navegador</strong>. Solo se descarga una vez el modelo de manos de MediaPipe (requiere internet la primera vez). Sin servidores por movimiento.</p>
+</section>
+
+<main class="stage-wrap">
+  <div id="stage" class="stage">
+    <video id="cam" playsinline muted></video>
+    <canvas id="overlay"></canvas>
+    <div id="console" class="console">
+      <div class="deck" id="deckA"></div>
+      <div class="mixer" id="mixer"></div>
+      <div class="deck deck-b" id="deckB"></div>
+    </div>
+    <div id="handCursor0" class="cursor c0"></div>
+    <div id="handCursor1" class="cursor c1"></div>
+    <div id="noCam" class="nocam">Cámara apagada — puedes usar mouse, teclado y táctil.<br><button class="btn" id="btnCam2">Activar cámara</button></div>
+  </div>
+</main>
+
+<section class="panels">
+  <div class="panel library">
+    <h2>Biblioteca</h2>
+    <div class="row">
+      <label class="btn small file-btn">Importar música<input id="fileImport" type="file" accept="audio/*" multiple hidden></label>
+      <button class="btn small" id="btnDemo">Cargar demos</button>
+      <input id="search" type="search" placeholder="Buscar pista…" aria-label="Buscar pista">
+    </div>
+    <ul id="trackList" class="track-list"></ul>
+    <div class="row">
+      <button class="btn load-a" id="loadA">LOAD A</button>
+      <button class="btn load-b" id="loadB">LOAD B</button>
+      <span id="libMsg" class="msg" role="status"></span>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>Calibración de la mesa</h2>
+    <label>Escala <input id="calScale" type="range" min="0.7" max="1.15" step="0.01" value="1"></label>
+    <label>Horizontal <input id="calX" type="range" min="-120" max="120" step="1" value="0"></label>
+    <label>Vertical <input id="calY" type="range" min="-80" max="80" step="1" value="0"></label>
+    <label>Sensibilidad pinza <input id="calSens" type="range" min="0.25" max="0.55" step="0.01" value="0.38"></label>
+    <label>Tamaño controles <input id="calSize" type="range" min="0.9" max="1.3" step="0.05" value="1"></label>
+    <div class="row"><button class="btn small" id="btnLock">Bloquear mesa</button><button class="btn small" id="btnZoomMixer">Ampliar mixer</button></div>
+    <p id="status" class="msg" role="status">Listo. Activa audio para empezar.</p>
+    <p class="msg">Atajos: <kbd>Q</kbd>/<kbd>A</kbd> play/cue deck A · <kbd>P</kbd>/<kbd>L</kbd> deck B · <kbd>←</kbd><kbd>→</kbd> crossfader · <kbd>G</kbd> gestos</p>
+  </div>
+  <div class="panel">
+    <h2>Transición asistida</h2>
+    <p class="msg">Mueve crossfader + graves + tempo durante 8 s hacia el otro deck. Cancelable; no es el algoritmo propietario de ninguna marca.</p>
+    <div class="row"><button class="btn" id="btnSmartB">→ Ir a B</button><button class="btn" id="btnSmartA">Ir a A ←</button><button class="btn" id="btnSmartCancel" disabled>Cancelar</button></div>
+    <label>Master <input id="masterVol" type="range" min="0" max="1" step="0.01" value="0.85" data-g="master"></label>
+    <div class="meter-row"><span>MASTER</span><div class="meter"><i id="masterMeter"></i></div></div>
+    <p class="msg">Preescucha independiente: <strong>no disponible</strong> (el navegador no garantiza una segunda salida separada).</p>
+  </div>
+</section>
+<footer class="foot">MotionDJ · Identidad propia, inspirada en controladoras de 2 canales · La webcam no detecta contacto físico ni profundidad precisa: la pinza se estima en 2D.</footer>
+<script type="module" src="/src/app/main.js"></script>
+</body>
+</html>
