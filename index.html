@@ -11,7 +11,8 @@
   <div class="brand"><span class="brand-mark">M</span><div><strong>MotionDJ</strong><small>Control por manos · Web Audio · Local</small></div></div>
   <div class="top-actions">
     <button id="btnGuide" class="btn">Inicio guiado</button>
-    <button id="btnGestures" class="btn warn" aria-pressed="false">Gestos: OFF</button>
+    <button id="btnMirror" class="btn" aria-pressed="true">Cámara: ESPEJO</button>
+    <button id="btnGestures" class="btn warn" aria-pressed="false">Gestos: PAUSADOS</button>
     <button id="btnDiag" class="btn" aria-pressed="false">Diagnóstico</button>
     <button id="btnRecord" class="btn">● Grabar mezcla</button>
     <span id="clipWarn" class="clip" hidden>SATURACIÓN</span>
@@ -38,8 +39,11 @@
       <div class="mixer" id="mixer"></div>
       <div class="deck deck-b" id="deckB"></div>
     </div>
-    <div id="handCursor0" class="cursor c0"></div>
-    <div id="handCursor1" class="cursor c1"></div>
+    <div id="handCursor0" class="cursor c0"><span></span></div>
+    <div id="handCursor1" class="cursor c1"><span></span></div>
+    <div id="focusTag" class="focus-tag" hidden></div>
+    <div id="twoHandBanner" class="twohand-banner" hidden></div>
+    <div id="gesturePaused" class="paused-banner">Gestos pausados — la música sigue. Pulsa «Gestos» o la tecla G para reanudar.</div>
     <div id="noCam" class="nocam">Cámara apagada — puedes usar mouse, teclado y táctil.<br><button class="btn" id="btnCam2">Activar cámara</button></div>
   </div>
 </main>
@@ -66,15 +70,26 @@
     <label>Vertical <input id="calY" type="range" min="-80" max="80" step="1" value="0"></label>
     <label>Sensibilidad pinza <input id="calSens" type="range" min="0.25" max="0.55" step="0.01" value="0.38"></label>
     <label>Tamaño controles <input id="calSize" type="range" min="0.9" max="1.3" step="0.05" value="1"></label>
+    <label>Ampliación zonas táctiles/gestuales <input id="calHit" type="range" min="0" max="28" step="2" value="16"></label>
     <div class="row"><button class="btn small" id="btnLock">Bloquear mesa</button><button class="btn small" id="btnZoomMixer">Ampliar mixer</button></div>
     <p id="status" class="msg" role="status">Listo. Activa audio para empezar.</p>
     <p class="msg">Atajos: <kbd>Q</kbd>/<kbd>A</kbd> play/cue deck A · <kbd>P</kbd>/<kbd>L</kbd> deck B · <kbd>←</kbd><kbd>→</kbd> crossfader · <kbd>G</kbd> gestos</p>
   </div>
   <div class="panel">
-    <h2>Transición asistida</h2>
-    <p class="msg">Mueve crossfader + graves + tempo durante 8 s hacia el otro deck. Cancelable; no es el algoritmo propietario de ninguna marca.</p>
-    <div class="row"><button class="btn" id="btnSmartB">→ Ir a B</button><button class="btn" id="btnSmartA">Ir a A ←</button><button class="btn" id="btnSmartCancel" disabled>Cancelar</button></div>
-    <label>Master <input id="masterVol" type="range" min="0" max="1" step="0.01" value="0.85" data-g="master"></label>
+    <h2>Transición a dos manos (experimental)</h2>
+    <p class="msg">«Mezcla suave»: crossfader + graves del deck que sale + eco breve en el centro. Experimental, sin sincronización de golpes. Requiere gestos activos.</p>
+    <label><input type="checkbox" id="twoEnabled"> Activar gestos de dos manos</label>
+    <div class="row">
+      <select id="twoMode" aria-label="Modo"><option value="auto">Automático</option><option value="expressive">Expresivo</option></select>
+      <select id="twoTarget" aria-label="Deck destino"><option value="1">Hacia B</option><option value="-1">Hacia A</option></select>
+      <select id="twoDuration" aria-label="Duración"><option value="4000">4 s</option><option value="8000" selected>8 s</option><option value="16000">16 s</option></select>
+    </div>
+    <p id="twoStatus" class="msg">Desactivado. Actívalo y mantén pinza con AMBAS manos 1 s para preparar.</p>
+    <div class="meter-row"><span>PROGRESO</span><div class="meter"><i id="twoProgress"></i></div><span id="twoProgressVal">0%</span></div>
+    <div class="meter-row"><span>FILTRO/DIST.</span><div class="meter"><i id="twoFilter"></i></div><span id="twoFilterVal">—</span></div>
+    <div class="row"><button class="btn" id="btnTwoConfirm" disabled>Confirmar transición</button><button class="btn" id="btnTwoCancel" disabled>Cancelar</button></div>
+    <p class="msg">Automático: prepara con ambas pinzas, suelta y confirma (botón o segunda pinza doble). Expresivo: tras confirmar, mueve una mano en horizontal para mezclar y separa/junta las manos para el filtro. Soltar o perder una mano congela sin saltos.</p>
+    <label>Master <input id="masterVol" type="range" min="0" max="1" step="0.01" value="0.85" data-g="range" data-param="master"></label>
     <div class="meter-row"><span>MASTER</span><div class="meter"><i id="masterMeter"></i></div></div>
     <p class="msg">Preescucha independiente: <strong>no disponible</strong> (el navegador no garantiza una segunda salida separada).</p>
   </div>

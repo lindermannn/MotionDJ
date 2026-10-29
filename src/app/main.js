@@ -1,7 +1,8 @@
 import { AudioEngine } from '../audio/engine.js';
 import { estimateBPM, computePeaks } from '../audio/bpm.js';
 import { createHandTracker, startCamera } from '../camera/tracker.js';
-import { PinchDetector, Smoother, ControlRegistry, pinchRatio, clamp } from '../gestures/logic.js';
+import { PinchDetector, Smoother, ControlRegistry, pinchRatio, clamp, expandRect, mapCoverPoint, handsDistance, TwoHandSession } from '../gestures/logic.js';
+import { transitionValues, expressiveValues, smooth } from '../audio/transition.js';
 
 const $ = s => document.querySelector(s);
 const stage = $('#stage'), video = $('#cam'), overlay = $('#overlay');
@@ -29,10 +30,7 @@ function deckHTML(d, i) {
   </div>
   <label>Tempo <span class="tempoval">+0.0%</span><input class="tempo" type="range" min="-8" max="8" step="0.1" value="0" data-g="range" data-deck="${i}" data-param="tempo"></label>
   <div class="row">
-    <select class="padmode" aria-label="Modo de pads">
-      <option value="hotcue">HOT CUE</option><option value="sampler">SAMPLER</option>
-      <option value="padfx">PAD FX</option><option value="beatjump">BEAT JUMP</option>
-    </select>
+    <button class="btn small padmode" data-mode="hotcue" title="Pinza/clic para cambiar de modo">MODO: HOT CUE</button>
     <button class="btn small loopbtn" data-act="loop">LOOP 4</button><span class="time loopinfo"></span>
   </div>
   <div class="pads">${Array.from({ length: 8 }, (_, p) => `<button class="pad" data-pad="${p}">PAD ${p + 1}</button>`).join('')}</div>`;
@@ -115,6 +113,7 @@ $('#loadB').onclick = () => loadToDeck(1);
 function setParam(input) {
   if (!engine) return;
   const p = input.dataset.param, i = Number(input.dataset.deck), v = Number(input.value), ch = engine?.decks[i], t = engine.ctx.currentTime;
+  if (p === 'master') return engine.master.gain.setTargetAtTime(v, t, 0.03);
   if (p === 'cross') return engine.setCross(v);
   if (p === 'delay') return engine.decks.forEach(d => d.delaySend.gain.setTargetAtTime(v, t, 0.05));
   if (p === 'verb') return engine.decks.forEach(d => d.verbSend.gain.setTargetAtTime(v, t, 0.05));
@@ -148,8 +147,9 @@ function deckAction(i, act, btn) {
   }
   refreshTransport();
 }
+const PAD_MODES = ['hotcue', 'sampler', 'padfx', 'beatjump'];
 function padAction(i, p, btn) {
-  ensureEngine(); const ch = engine.decks[i], d = decks[i], mode = d.el.querySelector('.padmode').value;
+  ensureEngine(); const ch = engine.decks[i], d = decks[i], mode = d.el.querySelector('.padmode').dataset.mode;
   btn.classList.add('hit'); setTimeout(() => btn.classList.remove('hit'), 180);
   if (mode === 'sampler') return engine.playSample(p);
   if (!ch.buffer) { status('Carga una pista para usar los pads.'); return; }
@@ -163,6 +163,7 @@ function padAction(i, p, btn) {
 decks.forEach((d, i) => {
   d.el.addEventListener('click', e => {
     const act = e.target.dataset?.act, pad = e.target.dataset?.pad;
+    if (e.target.classList.contains('padmode')) { const n = PAD_MODES[(PAD_MODES.indexOf(e.target.dataset.mode) + 1) % PAD_MODES.length]; e.target.dataset.mode = n; e.target.textContent = `MODO: ${n.toUpperCase()}`; return; }
     if (act) deckAction(i, act, e.target);
     if (pad !== undefined) padAction(i, Number(pad), e.target);
   });
@@ -194,22 +195,54 @@ let locked = false;
 $('#btnLock').onclick = e => { locked = !locked; ['calScale', 'calX', 'calY'].forEach(id => $('#' + id).disabled = locked); e.target.textContent = locked ? 'Desbloquear mesa' : 'Bloquear mesa'; };
 let zoomed = false;
 $('#btnZoomMixer').onclick = e => { zoomed = !zoomed; consoleEl.style.gridTemplateColumns = zoomed ? '0.6fr 1.4fr 0.6fr' : ''; e.target.textContent = zoomed ? 'Vista normal' : 'Ampliar mixer'; };
-// ---------- Transicion asistida y grabacion ----------
-function smartTo(target) { // target: -1 = A, 1 = B
-  if (!engine) return ensureEngine();
-  cancelSmart(); const cross = $('#cross'), from = Number(cross.value), t0 = performance.now();
-  const lowFrom = decks.map((d, i) => Number(d.el.querySelector('[data-param=low]')?.value || 0));
-  $('#btnSmartCancel').disabled = false;
-  smartTimer = setInterval(() => {
-    const k = Math.min(1, (performance.now() - t0) / 8000), e = k * k * (3 - 2 * k);
-    cross.value = (from + (target - from) * e).toFixed(3); engine.setCross(Number(cross.value));
-    decks.forEach((d, i) => { const inp = document.querySelector(`[data-param=low][data-deck="${i}"]`); if (inp) { const dest = (target === 1 ? i === 0 : i === 1) ? -18 : 0; inp.value = lowFrom[i] + (dest - lowFrom[i]) * e; setParam(inp); } });
-    if (k >= 1) cancelSmart();
-  }, 50);
-  status('Transición asistida en curso (8 s): crossfader + graves. Cancela para retomar control manual sin saltos.');
+// ---------- Transicion a dos manos y grabacion ----------
+// La sesion de gestos SOLO emite eventos; aqui se traducen a audio.
+const two = new TwoHandSession({ holdMs: 700, lossMs: 300 });
+let expressiveActive = false;
+function twoBanner(txt) { const b = $('#twoHandBanner'); b.hidden = !txt; b.textContent = txt || ''; }
+function twoStatus(txt) { $('#twoStatus').textContent = txt; }
+function lowInput(i) { return document.querySelector(`[data-param=low][data-deck="${i}"]`); }
+function filterInputs() { return [0, 1].map(i => document.querySelector(`[data-param=filter][data-deck="${i}"]`)); }
+function applyTransitionFrame(vals, target, progress01) {
+  if (!engine) return;
+  const cross = $('#cross'); cross.value = vals.cross; engine.setCross(vals.cross);
+  const outIdx = target === 1 ? 0 : 1, inIdx = 1 - outIdx;
+  if (lowInput(outIdx)) { lowInput(outIdx).value = vals.lowOut; setParam(lowInput(outIdx)); }
+  if (lowInput(inIdx)) { lowInput(inIdx).value = vals.lowIn; setParam(lowInput(inIdx)); }
+  if (vals.delay !== undefined) engine.decks.forEach(d => d.delaySend.gain.setTargetAtTime(vals.delay, engine.ctx.currentTime, 0.05));
+  $('#twoProgress').style.width = `${progress01 * 100}%`; $('#twoProgressVal').textContent = `${Math.round(progress01 * 100)}%`;
 }
-function cancelSmart() { if (smartTimer) clearInterval(smartTimer); smartTimer = null; $('#btnSmartCancel').disabled = true; }
-$('#btnSmartB').onclick = () => smartTo(1); $('#btnSmartA').onclick = () => smartTo(-1); $('#btnSmartCancel').onclick = () => { cancelSmart(); status('Transición cancelada. Control manual activo.'); };
+function startAutoTransition() {
+  ensureEngine(); cancelAuto(false);
+  const target = Number($('#twoTarget').value), dur = Number($('#twoDuration').value);
+  const from = Number($('#cross').value), lowFrom = [0, 1].map(i => Number(lowInput(i)?.value || 0)), t0 = performance.now();
+  $('#btnTwoCancel').disabled = false;
+  twoBanner(`Transición automática hacia ${target === 1 ? 'B' : 'A'} en curso… Cancela para retomar el control.`);
+  smartTimer = setInterval(() => {
+    const k = Math.min(1, (performance.now() - t0) / dur), vals = transitionValues(k, from, target), outIdx = target === 1 ? 0 : 1;
+    vals.lowOut = lowFrom[outIdx] + (-18 - lowFrom[outIdx]) * smooth(k);
+    applyTransitionFrame(vals, target, k);
+    if (k >= 1) { cancelAuto(false); twoBanner(''); twoStatus('Transición automática finalizada. Control manual activo.'); }
+  }, 50);
+}
+function cancelAuto(restoreMsg = true) {
+  if (smartTimer) clearInterval(smartTimer); smartTimer = null;
+  if (engine) engine.decks.forEach(d => d.delaySend.gain.setTargetAtTime(0, engine.ctx.currentTime, 0.08));
+  $('#btnTwoCancel').disabled = true;
+  if (restoreMsg) { twoBanner(''); twoStatus('Cancelado. Los valores quedan donde están: control manual sin saltos.'); }
+}
+function confirmTwoHand() {
+  if ($('#twoMode').value === 'auto') { startAutoTransition(); twoStatus('Automática iniciada tras confirmación explícita.'); }
+  else { expressiveActive = true; $('#btnTwoCancel').disabled = false; twoBanner('MODO EXPRESIVO: mueve una mano en horizontal para mezclar; separa/junta las manos para el filtro. Suelta para congelar.'); twoStatus('Expresivo activo.'); }
+}
+function freezeExpressive(reason) {
+  if (!expressiveActive) return; expressiveActive = false;
+  twoBanner(''); twoStatus(`${reason} Valores congelados sin saltos; control manual activo.`);
+}
+$('#btnTwoConfirm').onclick = () => { $('#btnTwoConfirm').disabled = true; confirmTwoHand(); };
+$('#btnTwoCancel').onclick = () => { cancelAuto(); freezeExpressive('Cancelado por el usuario.'); two.reset(); $('#btnTwoConfirm').disabled = true; };
+$('#twoEnabled').onchange = e => { if (!e.target.checked) { two.reset(); freezeExpressive('Dos manos desactivado.'); cancelAuto(false); twoBanner(''); } twoStatus(e.target.checked ? 'Activado. Mantén pinza con AMBAS manos 1 s para preparar (no se activa bailando ni con una mano).' : 'Desactivado.'); };
+// Compatibilidad: la antigua smartTo queda sustituida por startAutoTransition.
 $('#btnRecord').onclick = e => {
   ensureEngine();
   if (recorder) { recorder.stop(); return; }
@@ -221,19 +254,29 @@ $('#btnRecord').onclick = e => {
 // ---------- Camara y gestos ----------
 const registry = new ControlRegistry();
 const hands = [0, 1].map(() => ({ pinch: new PinchDetector(), smoothX: new Smoother(0.45), smoothY: new Smoother(0.45), seen: 0, el: null, needRelease: true }));
+let mirrored = true;
 function rebuildRegistry() {
   registry.controls.clear();
-  document.querySelectorAll('[data-g], .pad, .play, .cue').forEach((el, idx) => {
-    const r = el.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+  const pad = Number($('#calHit')?.value || 16), sr = stage.getBoundingClientRect();
+  // TODOS los controles de la mesa: sliders, botones (PLAY/CUE/SYNC/LOOP/pads/modo) y onda.
+  document.querySelectorAll('.console [data-g], .console button, .console .wave').forEach((el, idx) => {
+    const r = el.getBoundingClientRect();
     if (!r.width) return;
-    if (!el._gid) el._gid = `ctl-${idx}-${el.dataset.param || el.textContent.trim().slice(0, 8)}`;
-    registry.register(el._gid, { x: r.left - sr.left, y: r.top - sr.top, w: r.width, h: r.height }, { el, z: 1 });
+    if (!el._gid) el._gid = `ctl-${idx}-${el.dataset.param || el.dataset.act || el.className}`;
+    const base = { x: r.left - sr.left, y: r.top - sr.top, w: r.width, h: r.height };
+    registry.register(el._gid, el.classList.contains('wave') ? base : expandRect(base, pad), { el, z: el.classList.contains('wave') ? 0 : 1 });
   });
 }
 function coverPoint(lm) {
-  const sr = stage.getBoundingClientRect(), vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
-  const sc = Math.max(sr.width / vw, sr.height / vh), dw = vw * sc, dh = vh * sc;
-  return { x: (1 - lm.x) * dw + (sr.width - dw) / 2, y: lm.y * dh + (sr.height - dh) / 2, sr };
+  const sr = stage.getBoundingClientRect();
+  const p = mapCoverPoint(lm, video.videoWidth || 1280, video.videoHeight || 720, sr.width, sr.height, mirrored);
+  return { ...p, sr };
+}
+function controlLabel(el) {
+  if (!el) return '—';
+  if (el.dataset.param) return `${el.dataset.param.toUpperCase()} ${el.dataset.deck !== undefined ? 'AB'[el.dataset.deck] : ''}`.trim();
+  if (el.classList.contains('wave')) return 'ONDA (pinza = seek)';
+  return (el.textContent || el.className).trim().slice(0, 22);
 }
 function setRangeFromPoint(el, x) {
   const r = el.getBoundingClientRect(), sr = stage.getBoundingClientRect();
@@ -241,7 +284,12 @@ function setRangeFromPoint(el, x) {
   el.value = Number(el.min) + frac * (Number(el.max) - Number(el.min));
   el.dispatchEvent(new Event('input', { bubbles: true }));
 }
-function triggerEl(el) {
+function triggerEl(el, x) {
+  if (el.classList.contains('wave')) {
+    const deckEl = el.closest('.deck'), i = decks.findIndex(d => d.el === deckEl), r = el.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+    if (engine && decks[i].track) engine.decks[i].seek(clamp((x - (r.left - sr.left)) / r.width) * decks[i].track.buffer.duration);
+    return;
+  }
   if (el.classList.contains('pad')) { const deckEl = el.closest('.deck'); padAction(decks.findIndex(d => d.el === deckEl), Number(el.dataset.pad), el); }
   else el.click();
 }
@@ -254,10 +302,18 @@ async function enableCamera() {
   } catch (e) { status('Permiso de cámara denegado o no disponible. Usa mouse/teclado.'); }
 }
 $('#gCamera').onclick = enableCamera; $('#btnCam2').onclick = enableCamera;
+function applyMirror() {
+  video.style.transform = mirrored ? 'scaleX(-1)' : 'none';
+  const b = $('#btnMirror'); b.textContent = `Cámara: ${mirrored ? 'ESPEJO' : 'NORMAL'}`; b.setAttribute('aria-pressed', mirrored);
+  localStorage.setItem('motiondj-mirror', mirrored ? '1' : '0');
+}
+mirrored = localStorage.getItem('motiondj-mirror') !== '0'; applyMirror();
+$('#btnMirror').onclick = () => { mirrored = !mirrored; applyMirror(); hands.forEach(h => { h.smoothX.reset(); h.smoothY.reset(); }); status(mirrored ? 'Modo ESPEJO: te mueves como frente a un espejo.' : 'Modo NORMAL: la imagen no se invierte; el cursor sigue a tu dedo igualmente.'); };
 $('#btnGestures').onclick = e => {
-  gesturesOn = !gesturesOn; e.target.textContent = `Gestos: ${gesturesOn ? 'ON' : 'OFF'}`; e.target.setAttribute('aria-pressed', gesturesOn);
+  gesturesOn = !gesturesOn; e.target.textContent = gesturesOn ? 'Gestos: ACTIVOS (pausar)' : 'Gestos: PAUSADOS'; e.target.setAttribute('aria-pressed', gesturesOn);
+  $('#gesturePaused').style.display = gesturesOn ? 'none' : 'block';
   hands.forEach(h => { h.needRelease = true; h.pinch.reset(); });
-  if (!gesturesOn) registry.releaseAll();
+  if (!gesturesOn) { registry.releaseAll(); two.reset(); freezeExpressive('Gestos pausados.'); document.querySelectorAll('[data-focus]').forEach(el => el.removeAttribute('data-focus')); $('#focusTag').hidden = true; }
 };
 $('#btnDiag').onclick = e => { diag = !diag; e.target.setAttribute('aria-pressed', diag); if (!diag) overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height); };
 $('#btnGuide').onclick = () => $('#guide').scrollIntoView({ behavior: 'smooth' });
@@ -286,29 +342,58 @@ function loop() {
   if (!gesturesOn || !tracker) { hands.forEach((h, i) => { const c = $(`#handCursor${i}`); if (c) c.style.display = 'none'; }); return; }
   const res = tracker.detect(); rebuildRegistry();
   const ctx = overlay.getContext('2d'); overlay.width = stage.clientWidth; overlay.height = stage.clientHeight; ctx.clearRect(0, 0, overlay.width, overlay.height);
-  const lms = res?.landmarks || [];
-  hands.forEach((h, hi) => {
-    const cursor = $(`#handCursor${hi}`), lm = lms[hi];
-    if (!lm) { if (h.seen && performance.now() - h.seen > 250) { registry.release(hi); h.pinch.reset(); h.needRelease = true; } cursor.style.display = 'none'; return; }
-    h.seen = performance.now();
+  const lms = res?.landmarks || [], now = performance.now();
+  const pts = hands.map((h, hi) => {
+    const lm = lms[hi], cursor = $(`#handCursor${hi}`);
+    if (!lm) { if (h.seen && now - h.seen > 250) { registry.release(hi); h.pinch.reset(); h.needRelease = true; } cursor.style.display = 'none'; return null; }
+    h.seen = now;
     const tip = coverPoint(lm[8]), x = h.smoothX.update(tip.x), y = h.smoothY.update(tip.y);
-    cursor.style.display = 'block'; cursor.style.left = x + 'px'; cursor.style.top = y + 'px';
     h.pinch.on = Number($('#calSens').value); h.pinch.off = h.pinch.on + 0.14;
-    const det = h.pinch.update(pinchRatio(lm)); cursor.classList.toggle('pinched', det.pinched);
-    document.querySelectorAll('[data-grabbed]').forEach(el => el.removeAttribute('data-grabbed'));
-    const grabbedId = registry.grabbedBy(hi);
-    if (grabbedId) { const c = registry.controls.get(grabbedId); if (c?.el?.dataset.g === 'range') setRangeFromPoint(c.el, x); if (c) c.el.setAttribute('data-grabbed', '1'); }
-    if (det.started && !h.needRelease) {
-      const hit = registry.hit(x, y);
-      if (hit) { if (hit.el.dataset.g === 'range') { if (registry.grab(hi, hit.id)) setRangeFromPoint(hit.el, x); } else triggerEl(hit.el); }
+    const det = h.pinch.update(pinchRatio(lm));
+    cursor.style.display = 'block'; cursor.style.left = x + 'px'; cursor.style.top = y + 'px'; cursor.classList.toggle('pinched', det.pinched);
+    return { lm, x, y, det };
+  });
+  // --- Sesion a dos manos (solo emite eventos; el audio se aplica aqui) ---
+  const twoOn = $('#twoEnabled').checked;
+  let twoBusy = false;
+  if (twoOn && pts[0] && pts[1]) {
+    const bothPinched = pts.every(p => p.det.pinched), ev = two.update({ bothPinched, bothPresent: true }, now);
+    if (bothPinched) { registry.releaseAll(); twoBusy = true; }
+    if (ev.event === 'prepared') { const t = Number($('#twoTarget').value); twoBanner(`Transición «Mezcla suave» hacia ${t === 1 ? 'B' : 'A'} PREPARADA: crossfader + graves + eco (${$('#twoDuration').value / 1000}s). Suelta ambas manos y confirma con el botón o una segunda pinza doble.`); twoStatus('Preparada. Esperando confirmación explícita.'); $('#btnTwoConfirm').disabled = false; }
+    if (ev.event === 'armed') twoStatus('Lista: pulsa Confirmar o haz pinza con ambas manos para iniciar.');
+    if (ev.event === 'confirmed') { $('#btnTwoConfirm').disabled = true; confirmTwoHand(); }
+    if (ev.event === 'freeze' || ev.event === 'released') freezeExpressive(ev.event === 'freeze' ? 'Se perdió una mano.' : 'Pinzas soltadas.');
+    if (expressiveActive && pts[0] && pts[1]) {
+      twoBusy = true; const target = Number($('#twoTarget').value);
+      const vals = expressiveValues(clamp(pts[1].x / stage.clientWidth), handsDistance(pts[0], pts[1], stage.clientWidth), target);
+      applyTransitionFrame({ cross: vals.cross, lowOut: vals.lowOut, lowIn: 0 }, target, vals.progress);
+      filterInputs().forEach(inp => { if (inp) { inp.value = vals.filter; setParam(inp); } });
+      $('#twoFilter').style.width = `${(vals.filter + 50)}%`; $('#twoFilterVal').textContent = `${Math.round(vals.filter)}`;
     }
-    if (det.ended) { registry.release(hi); h.needRelease = false; }
+  } else if (twoOn) { const ev = two.update({ bothPinched: false, bothPresent: false }, now); if (ev.event === 'freeze') freezeExpressive('Se perdió una mano.'); }
+  // --- Mano individual: foco visible antes de pinzar ---
+  document.querySelectorAll('[data-focus]').forEach(el => el.removeAttribute('data-focus'));
+  document.querySelectorAll('[data-grabbed]').forEach(el => el.removeAttribute('data-grabbed'));
+  let focusLabel = '';
+  hands.forEach((h, hi) => {
+    const p = pts[hi]; if (!p) return;
+    const hit = registry.hit(p.x, p.y);
+    if (hit && !p.det.pinched) { hit.el.setAttribute('data-focus', '1'); focusLabel = controlLabel(hit.el); $(`#handCursor${hi}`).querySelector('span').textContent = focusLabel; }
+    else $(`#handCursor${hi}`).querySelector('span').textContent = p.det.pinched ? 'TOMADO' : '';
+    if (twoBusy || expressiveActive) return;
+    const grabbedId = registry.grabbedBy(hi);
+    if (grabbedId) { const c = registry.controls.get(grabbedId); if (c?.el?.dataset.g === 'range') setRangeFromPoint(c.el, p.x); if (c) c.el.setAttribute('data-grabbed', '1'); }
+    if (p.det.started && !h.needRelease && hit) {
+      if (hit.el.dataset.g === 'range') { if (registry.grab(hi, hit.id)) setRangeFromPoint(hit.el, p.x); } else triggerEl(hit.el, p.x);
+    }
+    if (p.det.ended) { registry.release(hi); h.needRelease = false; }
     if (diag) {
       ctx.fillStyle = hi ? '#f472b6' : '#22d3ee';
-      lm.forEach(p => { const pt = coverPoint(p); ctx.fillRect(pt.x - 2, pt.y - 2, 4, 4); });
+      p.lm.forEach(pt0 => { const pt = coverPoint(pt0); ctx.fillRect(pt.x - 2, pt.y - 2, 4, 4); });
       ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif';
-      ctx.fillText(`Mano ${hi}: pinza=${det.pinched ? 'SI' : 'no'} ratio=${pinchRatio(lm).toFixed(2)} foco=${registry.hit(x, y)?.el?.dataset?.param || registry.hit(x, y)?.el?.textContent?.trim().slice(0, 10) || '—'}`, 10, 18 + hi * 16);
+      ctx.fillText(`Mano ${hi} (${mirrored ? 'espejo' : 'normal'}): pinza=${p.det.pinched ? 'SI' : 'no'} ratio=${pinchRatio(p.lm).toFixed(2)} foco=${controlLabel(hit?.el)} dos-manos=${two.state}`, 10, 18 + hi * 16);
     }
   });
+  const ft = $('#focusTag'); ft.hidden = !focusLabel; ft.textContent = focusLabel ? `Enfocado: ${focusLabel} — haz pinza para tomarlo` : '';
 }
 loop();

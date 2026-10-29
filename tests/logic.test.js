@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pinchRatio, PinchDetector, Smoother, crossfaderGains, ControlRegistry, faderValue } from '../src/gestures/logic.js';
+import { pinchRatio, PinchDetector, Smoother, crossfaderGains, ControlRegistry, faderValue, expandRect, mapCoverPoint, handsDistance, TwoHandSession } from '../src/gestures/logic.js';
+import { transitionValues, expressiveValues, smooth } from '../src/audio/transition.js';
 
 const hand = (tipDist) => {
   const lm = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
@@ -36,6 +37,35 @@ test('una mano no roba el control de la otra y perderla libera solo el suyo', ()
   assert.equal(r.grab(1, 'y'), true);
   assert.equal(r.release(0), 'x');
   assert.equal(r.grabbedBy(1), 'y');
+});
+test('zonas ampliadas garantizan minimo y mapeo espejo/normal sigue al dedo', () => {
+  const r = expandRect({ x: 100, y: 100, w: 20, h: 10 }, 16);
+  assert.ok(r.w >= 44 && r.h >= 40 && r.x < 100 && r.y < 100);
+  const lm = { x: 0.25, y: 0.5 };
+  const espejo = mapCoverPoint(lm, 100, 100, 100, 100, true);
+  const normal = mapCoverPoint(lm, 100, 100, 100, 100, false);
+  assert.equal(espejo.x, 75); assert.equal(normal.x, 25); assert.equal(espejo.y, 50);
+});
+test('dos manos: bailar o una pinza breve no prepara; hace falta mantener, soltar y confirmar', () => {
+  const s = new TwoHandSession({ holdMs: 700, lossMs: 300 });
+  assert.equal(s.update({ bothPinched: true, bothPresent: true }, 0).event, null);
+  assert.equal(s.update({ bothPinched: true, bothPresent: true }, 300).event, null); // breve
+  s.update({ bothPinched: false, bothPresent: true }, 400);
+  s.update({ bothPinched: true, bothPresent: true }, 500);
+  assert.equal(s.update({ bothPinched: true, bothPresent: true }, 1300).event, 'prepared');
+  assert.equal(s.update({ bothPinched: false, bothPresent: true }, 1400).event, 'armed');
+  assert.equal(s.update({ bothPinched: true, bothPresent: true }, 1500).event, 'confirmed');
+  assert.equal(s.update({ bothPinched: false, bothPresent: false }, 1600).event, null);
+  assert.equal(s.update({ bothPinched: false, bothPresent: false }, 2000).event, 'freeze'); // pierde mano en activo
+});
+test('transicion suave y expresiva son continuas en los extremos', () => {
+  assert.equal(transitionValues(0, -1, 1).cross, -1);
+  assert.equal(transitionValues(1, -1, 1).cross, 1);
+  assert.equal(transitionValues(1, -1, 1).delay, Math.sin(Math.PI) * 0.3);
+  assert.ok(Math.abs(smooth(0.5) - 0.5) < 1e-9);
+  const ex = expressiveValues(1, 1, 1);
+  assert.equal(ex.cross, 1); assert.equal(ex.filter, 50);
+  assert.equal(handsDistance({ x: 0, y: 0 }, { x: 60, y: 0 }, 100), 1);
 });
 test('suavizado reduce saltos y fader mapea bordes', () => {
   const s = new Smoother(0.5); s.update(0);
