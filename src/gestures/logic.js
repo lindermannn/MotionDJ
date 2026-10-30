@@ -96,6 +96,26 @@ export function zoomWindow(pos, duration, winSec = 8) {
   let start = Math.min(Math.max(pos - win / 2, 0), Math.max(0, duration - win));
   return { start, end: start + win, frac: Math.min(1, Math.max(0, (pos - start) / win)) };
 }
+// Valores por defecto del boton Restablecer (P1): calibracion conocida y
+// mezclador neutro. Las pistas cargadas y lo que suena NO se tocan.
+export const RESET_DEFAULTS = Object.freeze({
+  cal: Object.freeze({ scale: 1, x: 0, y: 0, sens: 0.38, size: 1, knob: 220 }),
+  params: Object.freeze({ high: 0, mid: 0, low: 0, trim: 1, filter: 0, eco: 0, vol: 0.85, tempo: 0, cross: 0, master: 0.85 })
+});
+// Saneado de la calibracion persistida: campo invalido -> valor por defecto.
+export function sanitizeCal(raw) {
+  const d = RESET_DEFAULTS.cal, c = raw && typeof raw === 'object' ? raw : {};
+  const num = (v, lo, hi, def) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : def; };
+  return {
+    s: num(c.s, 0.7, 1.15, d.scale), x: num(c.x, -120, 120, d.x), y: num(c.y, -80, 80, d.y),
+    sens: num(c.sens, 0.25, 0.55, d.sens), size: num(c.size, 0.9, 1.3, d.size), knob: num(c.knob, 120, 420, d.knob)
+  };
+}
+// Guardarrail de graves (P4): aviso cuando ambos LOW estan fuertes y el
+// crossfader esta en zona central. Propone, nunca bloquea.
+export function bassClash(lowA, lowB, cross, { lowThreshold = 3, crossZone = 0.35 } = {}) {
+  return Number(lowA) >= lowThreshold && Number(lowB) >= lowThreshold && Math.abs(Number(cross) || 0) <= crossZone;
+}
 // Reten del tempo: cerca de 0 % el fader se queda en 0 (Etapa 11).
 export function tempoDetent(v, zone = 0.3) { return Math.abs(v) <= zone ? 0 : v; }
 // Arrastre en la onda: clic/pinza = salto al punto; mantener y mover =

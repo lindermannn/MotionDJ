@@ -1,45 +1,50 @@
 # MotionDJ
 
-Controladora DJ web de 2 decks controlada por gestos de las manos con la webcam, con alternativa completa de mouse, teclado y táctil. Identidad visual propia (cian/magenta sobre vídeo espejo), inspirada en la distribución general de controladoras de 2 canales. No usa marcas ni diseños de terceros.
+Controladora DJ web de 2 decks que se maneja con las manos frente a la webcam (o con mouse, teclado y táctil). Pensada para que alguien sin experiencia mezcle dos canciones en minutos, y con profundidad para quien ya pincha: rejilla de golpes estimada, SYNC con alineación de fase, búsqueda con el jog oyendo la pista en ambos sentidos y efectos a dos pinzas.
 
-## Requisitos e instalación
+Identidad visual propia (cian A / magenta B sobre cabina oscura). Sin marcas ni diseños de terceros.
 
-- Node.js 20+ y un navegador moderno (Chrome/Edge recomendados) con Web Audio y `getUserMedia`.
-- Internet solo la primera vez: se descargan el modelo y el WASM de MediaPipe Hand Landmarker desde CDN. Después, la detección es local.
+## Ejecutarlo en 3 pasos
+
+Requisitos: Node.js 20+ y Chrome o Edge (Web Audio + `getUserMedia`). **No necesita internet**: el modelo de manos y su WASM van dentro del proyecto.
 
 ```powershell
-cd MotionDJ
-npm install --cache .npm-cache
+npm install
 npm run dev
 ```
 
-Abre http://127.0.0.1:5173 en tu navegador.
+Abre http://127.0.0.1:5173, pulsa **Activar audio**, **Cargar demos** (dos pistas generadas por la propia app, sin música con derechos) e **importa tu música** o elige tu carpeta: tus archivos se procesan en tu navegador y no se suben a ningún servidor.
 
-## Uso rápido
+Para producción estática: `npm run build` genera `dist/` (sirve igual en Vercel/Netlify o cualquier hosting de archivos; la cámara exige HTTPS o localhost).
 
-1. Pulsa **Activar audio** (el navegador exige un gesto del usuario).
-2. Pulsa **Cargar demos** (2 pistas sintetizadas de 16 s, 122/124 BPM) o **Importar música** con tus archivos.
-3. Selecciona una pista y pulsa **LOAD A** / **LOAD B**. Cargar no reproduce automáticamente y no reemplaza un deck sonando sin confirmación.
-4. Pulsa **Activar cámara**, permite el acceso y pulsa **Gestos: ON**.
-5. Haz pinza (pulgar+índice) sobre el crossfader, un fader, un knob o un botón y muévete manteniendo la pinza. Suelta para liberar.
-6. Calibra escala/posición/tamaño, bloquea la mesa y usa **Diagnóstico** para ver landmarks, ratio de pinza y control enfocado/tomado.
+## Qué hace (solo lo real)
 
-## Qué funciona (real, no solo visual)
+- **Dos decks** con PLAY/CUE/SYNC, tempo ±8 % con retén en 0, loop de 4 tiempos, onda completa y onda ampliada (4/8/16 s) para ver la rejilla sobre los bombos.
+- **Mezclador**: EQ −26…+6 dB, TRIM, FILTRO de un mando (quita agudos a un lado, graves al otro), ECO por canal que sigue solo al BPM, volúmenes, crossfader, MASTER, limitador con techo medido y aviso de saturación y de «dos graves».
+- **Jog útil de verdad**: el centro busca el punto de entrada **con audio hacia delante y hacia atrás** (AudioWorklet propio); el borde empuja el tempo unos % y vuelve solo a su sitio.
+- **Pads fijos**: 2 hot cues, 2 saltos de 4 tiempos, 2 efectos y 2 sonidos. Sin cambiar de modo.
+- **Selector PISTAS** a pantalla completa: elige la siguiente pista con los dedos mientras la otra suena, con tu orden guardado y confirmación mantenida si el deck está sonando.
+- **Gestos**: pinza para tomar cualquier control (sin saltos), dos pinzas para transición suave o expresiva y para ajustar Filtro/Eco, identidad de manos estable al cruzarse, encuadre RECORTE/COMPLETO con el puntero siguiendo a tu dedo.
+- **Auto DJ** básico A↔B, transición suave, grabación de la mezcla a `.webm`, Vista fácil sin jerga y «Igualar y mezclar» en un botón.
+- **Preescucha en auriculares (experimental)**: bus separado con elección de salida (`setSinkId`) para oír el deck que no suena; no entra en la grabación.
 
-- Dos decks independientes: play/pause, CUE principal, clic o arrastre fino (con imán a golpe) en la forma de onda, tempo ±8 % (cambia también el tono), loop de 4 pulsos, medidores y tiempos.
-- Biblioteca local con búsqueda, LOAD A/B, indicadores de deck y cola (+ cola / «Siguiente ▶» al deck libre); los archivos se procesan en el navegador y no persisten tras recargar.
-- Mixer real (Web Audio): trim, EQ de 3 bandas, filtro, volumen por canal, crossfader equal-power, master con compresor, limitador con aviso SATURACIÓN/LIMITADOR y curva de techo, delay y reverb por envíos. Las 10 perillas (EQ/Trim/Filtro) se arrastran con mouse, táctil o pinza con barra de valor.
-- 8 pads por deck con modos HOT CUE (borrables con Mayús+clic, clic derecho o modo borrar), SAMPLER (sonidos sintetizados), PAD FX y BEAT JUMP. Jog wheel con scratch por velocidad (sin reverse real) con ratón, táctil o pinza+mover.
-- BPM estimado por autocorrelación de energía (orientativo), SYNC que iguala tempo con el BPM efectivo y alinea la fase con la rejilla estimada, eco del mezclador sincronizable al BPM (¼/½/1) y espectro del master ocultable.
-- Transición asistida de 8 s (crossfader + graves), cancelable y con vuelta manual sin saltos.
-- Grabación de la mezcla a `.webm` mediante `MediaRecorder`.
-- Gestos: 2 manos independientes, pinza normalizada por tamaño de mano con histéresis, suavizado, liberación al perder la mano y bloqueo de gestos. La webcam no detecta contacto físico ni profundidad precisa: es estimación 2D en modo espejo.
+## Mapa de gestos
 
-## Privacidad y permisos
+| Gesto | Qué hace |
+|---|---|
+| Pinza sobre un control | Lo toma: faders y perillas con arrastre relativo, sin saltos |
+| Pinza sobre el jog (centro/borde) | Buscar con audio / empujar el tempo |
+| Pinza en cada mano, mantener y soltar | Prepara la transición a dos manos |
+| Pinza en cada mano en el aire (FX preparado) | Ajusta Filtro o Eco; soltar congela |
+| Pinza corta sobre PISTAS o un recuadro | Abre el selector / carga la pista |
+| Tecla `G` | Pausa los gestos sin parar la música |
 
-- Cámara y audio se procesan localmente; ningún fotograma ni movimiento se envía a un servidor.
-- Permisos: cámara (solo al activarla) y reproducción de audio tras tu clic.
-- Preescucha independiente por auriculares: no disponible (ver `docs/estado.md`).
+## Qué es estimado o limitado (honestidad)
+
+- El **BPM es estimado** por análisis propio (medido: demos 122/124 exactos; en las pistas del autor, 154,1 / 152,0 / ~132). SYNC iguala el BPM efectivo y alinea la fase con esa rejilla; no es un beatmatching infalible.
+- El tempo cambia también el tono (no hay time-stretch).
+- La webcam estima manos en 2D: sin profundidad ni contacto real. La garra de cinco dedos sigue experimental y apagada por defecto.
+- Sin detección de tonalidad, sin stems, sin micrófono. La preescucha es experimental hasta validarla con dos salidas reales.
 
 ## Pruebas
 
@@ -48,10 +53,8 @@ npm test
 npm run build
 ```
 
-Ver `docs/pruebas.md` para resultados y lo que falta probar con webcam real y altavoces.
+37 pruebas de lógica pura (rejilla, SYNC, eco, scrub, selector, máquina FX…) y verificación en navegador sin cámara. Lo que solo se valida con webcam y oídos está listado en `docs/pruebas.md`.
 
-## Limitaciones conocidas
+## Créditos y licencias
 
-- Sin validación física con webcam en esta entrega (pendiente contigo).
-- BPM/Sync orientativos; el tempo altera el tono; sin scratch ni preescucha.
-- La biblioteca no persiste tras recargar la página.
+MediaPipe Hand Landmarker y su WASM (Apache-2.0, Google) van empaquetados en `public/mediapipe/`. Vite (MIT) solo compila. El resto es código y síntesis propios; detalle en `docs/licencias.md`. Historia y estado: `docs/estado.md`. Texto de entrega y guion de demo: `docs/entrega.md`.

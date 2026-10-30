@@ -1,4 +1,5 @@
 import { crossfaderGains } from '../gestures/logic.js';
+import { scrubPosition } from './scrub.js';
 // Motor Web Audio: 2 canales -> trim -> EQ3 -> filtro -> fader -> crossfader
 // -> master -> analyser -> destino. Efectos: delay y reverb (convolver generado).
 export class Channel {
@@ -10,6 +11,8 @@ export class Channel {
     // la rampa en vez de suponer el rate nuevo instantaneo.
     this.RATE_TAU = 0.03;
     this._rFrom = 1; this._rTo = 1;
+    this.scrubNode = null; this.scrubbing = false; this.scrubPos = 0; this.scrubSpeed = 0; this._scrubAt = 0; this._scrubWasPlaying = false;
+    this.cueSend = ctx.createGain(); this.cueSend.gain.value = 0; // preescucha (P3.c)
     this.trim = ctx.createGain(); this.low = ctx.createBiquadFilter();
     this.mid = ctx.createBiquadFilter(); this.high = ctx.createBiquadFilter();
     this.filter = ctx.createBiquadFilter(); this.fader = ctx.createGain();
@@ -26,9 +29,49 @@ export class Channel {
     this.high.connect(this.filter); this.filter.connect(this.filterHp); this.filterHp.connect(this.fader);
     this.fader.connect(this.xGain); this.xGain.connect(this.analyser); this.analyser.connect(masterIn);
     this.fader.connect(this.delaySend); this.fader.connect(this.verbSend);
+    this.filter.connect(this.cueSend); // pre-fader: se oye aunque el canal este cerrado
     this.delaySend.gain.value = 0; this.verbSend.gain.value = 0;
   }
-  load(buffer) { this.stop(); this.buffer = buffer; this.offset = 0; this.cue = 0; this.loopRange = null; }
+  load(buffer) { this.stop(); this.buffer = buffer; this.offset = 0; this.cue = 0; this.loopRange = null; if (this.scrubNode && buffer) this._sendBuffer(); }
+  // --- Scrub con worklet (P3.a): posicion/velocidad con signo ---
+  attachScrub(node) {
+    this.scrubNode = node;
+    node.connect(this.trim);
+    node.port.onmessage = e => { if (e.data?.type === 'pos') { this.scrubPos = e.data.pos; this._scrubAt = this.ctx.currentTime; } };
+    if (this.buffer) this._sendBuffer();
+  }
+  _sendBuffer() {
+    const l = this.buffer.getChannelData(0), r = this.buffer.numberOfChannels > 1 ? this.buffer.getChannelData(1) : l;
+    this.scrubNode.port.postMessage({ type: 'load', left: l.slice(0), right: r.slice(0) });
+  }
+  startScrub() {
+    if (!this.scrubNode || !this.buffer || this.scrubbing) return false;
+    this._scrubWasPlaying = this.playing;
+    this.scrubPos = this.position();
+    this._scrubAt = this.ctx.currentTime;
+    if (this.playing) this.pause();
+    this.scrubbing = true; this.scrubSpeed = 0;
+    this.scrubNode.port.postMessage({ type: 'set', pos: this.scrubPos * this.ctx.sampleRate, speed: 0, playing: true });
+    return true;
+  }
+  setScrubSpeed(ratio) {
+    if (!this.scrubbing) return;
+    this.scrubSpeed = Math.max(-3, Math.min(3, ratio || 0));
+    this.scrubNode.port.postMessage({ type: 'set', speed: this.scrubSpeed, playing: true });
+  }
+  scrubNow() {
+    if (!this.scrubbing || !this.buffer) return this.scrubPos;
+    const dt = Math.max(0, this.ctx.currentTime - this._scrubAt);
+    return scrubPosition(this.scrubPos, this.scrubSpeed, dt, this.buffer.duration);
+  }
+  endScrub() {
+    if (!this.scrubbing) return;
+    const pos = this.scrubNow();
+    this.scrubbing = false; this.scrubSpeed = 0;
+    this.scrubNode.port.postMessage({ type: 'set', speed: 0, playing: false });
+    this.offset = pos;
+    if (this._scrubWasPlaying) this.play(); // reanuda en el punto, rate normal con su rampa
+  }
   setLoop(start, end) {
     if (!(end > start)) return;
     this.loopRange = { start, end };
@@ -64,6 +107,7 @@ export class Channel {
   seek(t) { const was = this.playing; this._stopSource(); this.playing = false; this.offset = Math.max(0, Math.min(t, this.buffer ? this.buffer.duration : 0)); if (was) this.play(); }
   position() {
     if (!this.buffer) return 0;
+    if (this.scrubbing) return this.scrubNow();
     if (!this.playing) return this.offset;
     // Integral analitica de la rampa: rTo*e + (rFrom-rTo)*tau*(1-exp(-e/tau))
     const e = this.ctx.currentTime - this.startedAt;
@@ -146,6 +190,23 @@ export class AudioEngine {
     this.verbOut = this.ctx.createGain(); this.verb.connect(this.verbOut); this.verbOut.connect(this.master);
     for (const d of this.decks) { d.delaySend.connect(this.delay); d.verbSend.connect(this.verb); }
     this.cross = 0; this.applyCrossfader();
+    // Bus de preescucha (P3.c): destino de stream independiente del master.
+    // Un <audio> con setSinkId lo manda a los auriculares; la grabacion
+    // (recordDest) cuelga del master y nunca incluye la preescucha.
+    this.cueDest = this.ctx.createMediaStreamDestination();
+    for (const d of this.decks) d.cueSend.connect(this.cueDest);
+    this._scrubReady = null;
+  }
+  // Carga el worklet de scrub una vez y lo adjunta a ambos canales.
+  ensureScrub(workletUrl) {
+    if (!this._scrubReady) {
+      this._scrubReady = (async () => {
+        await this.ctx.audioWorklet.addModule(workletUrl);
+        for (const d of this.decks) d.attachScrub(new AudioWorkletNode(this.ctx, 'motiondj-scrub', { numberOfOutputs: 1, outputChannelCount: [2] }));
+        return true;
+      })().catch(() => false);
+    }
+    return this._scrubReady;
   }
   _impulse(dur, decay) {
     const rate = this.ctx.sampleRate, len = rate * dur, buf = this.ctx.createBuffer(2, len, rate);

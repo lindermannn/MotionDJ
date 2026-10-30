@@ -482,6 +482,72 @@ test('filtro bipolar: centro neutro, un lado pasa-bajos y el otro pasa-altos', a
   assert.ok(filterFreqs(-25).lp < 18000 && filterFreqs(-25).lp > 400);
   assert.ok(filterFreqs(25).hp > 10 && filterFreqs(25).hp < 4000);
 });
+test('preescucha: seleccion, persistencia y rechazo si coincide con la mezcla', async () => {
+  const { normalizeOutputs, resolveSavedCue, cueBlockReason, cueStateText } = await import('../src/audio/cue-output.js');
+  const raw = [
+    { kind: 'audiooutput', deviceId: 'default', label: 'Altavoces (Realtek(R) Audio)' },
+    { kind: 'audiooutput', deviceId: 'abc', label: 'Altavoces (Realtek(R) Audio)' },
+    { kind: 'audiooutput', deviceId: 'def', label: 'Realtek Digital Output (Realtek(R) Audio)' },
+    { kind: 'audioinput', deviceId: 'mic', label: 'Microfono' },
+    { kind: 'audiooutput', deviceId: '', label: '' }
+  ];
+  const outs = normalizeOutputs(raw);
+  assert.equal(outs.length, 4); // sin el microfono, sin duplicados exactos
+  assert.equal(outs[0].isAlias, true);
+  assert.match(outs[3].displayName, /sin nombre/);
+  // Persistencia: encontrado, sin verificar (lista vacia) y desaparecido.
+  assert.equal(resolveSavedCue(outs, { deviceId: 'def', label: 'x' }).status, 'found');
+  assert.equal(resolveSavedCue([], { deviceId: 'def' }).status, 'unverified');
+  assert.equal(resolveSavedCue(outs, { deviceId: 'zzz' }).status, 'missing');
+  assert.equal(resolveSavedCue(outs, null).status, 'none');
+  // Rechazo: sin elegir, alias del sistema o mismo nombre que el alias.
+  assert.equal(cueBlockReason(null, outs), 'sin-elegir');
+  assert.equal(cueBlockReason({ deviceId: 'default' }, outs), 'coincide-mezcla');
+  assert.equal(cueBlockReason({ deviceId: 'abc', label: 'Altavoces (Realtek(R) Audio)' }, outs), 'coincide-mezcla');
+  assert.equal(cueBlockReason({ deviceId: 'def', label: 'Realtek Digital Output (Realtek(R) Audio)' }, outs), null);
+  assert.equal(cueStateText({}), 'Preescucha: apagada');
+  assert.equal(cueStateText({ activeDeck: 1, deviceName: 'Altavoces (Realtek(R) Audio)' }), 'Preescucha: activa en Altavoces (Realtek(R) Audio) · Deck B');
+});
+test('guardarrail de graves: avisa solo con ambos LOW fuertes y crossfader central', async () => {
+  const { bassClash } = await import('../src/gestures/logic.js');
+  assert.equal(bassClash(6, 5, 0), true);
+  assert.equal(bassClash(6, 0, 0), false);
+  assert.equal(bassClash(6, 6, 0.9), false);
+  assert.equal(bassClash(2, 6, 0), false);
+});
+test('selector PISTAS: ventana, reordenar y carga segura', async () => {
+  const { pickerWindow, moveItem, loadSafety } = await import('../src/audio/queue.js');
+  assert.deepEqual(pickerWindow(842, 0), { start: 0, end: 7 });
+  assert.deepEqual(pickerWindow(842, 840), { start: 835, end: 842 });
+  assert.deepEqual(pickerWindow(3, 2), { start: 0, end: 3 });
+  assert.deepEqual(moveItem(['a', 'b', 'c'], 0, 1), ['b', 'a', 'c']);
+  assert.deepEqual(moveItem(['a', 'b'], 0, -1), ['a', 'b']); // borde: sin cambio
+  assert.equal(loadSafety({ hasTrack: false, playing: false }), 'immediate');
+  assert.equal(loadSafety({ hasTrack: true, playing: false }), 'immediate');
+  assert.equal(loadSafety({ hasTrack: true, playing: true }), 'confirm-hold');
+});
+test('scrub: velocidad con signo, posicion circular y nudge temporal', async () => {
+  const { jogSpeed, scrubPosition, nudgeFactor, clampSpeed } = await import('../src/audio/scrub.js');
+  assert.equal(jogSpeed(1, 1.8), 1.8);
+  assert.equal(jogSpeed(-1, 1.8), -1.8); // hacia atras: negativo, el worklet lo suena
+  assert.equal(jogSpeed(10, 1.8), 3); assert.equal(jogSpeed(-10, 1.8), -3); // limites
+  assert.equal(clampSpeed(0.5), 0.5);
+  assert.ok(Math.abs(scrubPosition(10, 1, 2, 240) - 12) < 1e-9);
+  assert.ok(Math.abs(scrubPosition(10, -1, 3, 240) - 7) < 1e-9); // retroceder
+  assert.ok(Math.abs(scrubPosition(239, 1, 2, 240) - 1) < 1e-9); // vuelta al final
+  assert.ok(Math.abs(scrubPosition(1, -1, 2, 240) - 239) < 1e-9); // vuelta al principio
+  assert.equal(scrubPosition(5, 1, 1, 0), 0);
+  assert.equal(nudgeFactor(0), 1);
+  assert.ok(Math.abs(nudgeFactor(2) - 1.16) < 1e-9 && Math.abs(nudgeFactor(-2) - 0.84) < 1e-9);
+});
+test('Restablecer: defaults conocidos y calibracion corrupta saneada', async () => {
+  const { RESET_DEFAULTS, sanitizeCal } = await import('../src/gestures/logic.js');
+  assert.equal(RESET_DEFAULTS.cal.knob, 220); assert.equal(RESET_DEFAULTS.cal.sens, 0.38);
+  assert.equal(RESET_DEFAULTS.params.cross, 0); assert.equal(RESET_DEFAULTS.params.master, 0.85);
+  assert.deepEqual(sanitizeCal(null), { s: 1, x: 0, y: 0, sens: 0.38, size: 1, knob: 220 });
+  const bad = sanitizeCal({ s: 'x', x: 9999, y: NaN, sens: 2, size: 1.1, knob: -5 });
+  assert.equal(bad.s, 1); assert.equal(bad.x, 120); assert.equal(bad.y, 0); assert.equal(bad.sens, 0.55); assert.equal(bad.knob, 120);
+});
 test('suavizado reduce saltos y fader mapea bordes', () => {
   const s = new Smoother(0.5); s.update(0);
   assert.equal(s.update(100), 50);

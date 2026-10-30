@@ -2,7 +2,7 @@ import { AudioEngine, clipState, filterFreqs } from '../audio/engine.js';
 import { computePeaks } from '../audio/bpm.js';
 import { analyzeBeatgrid, quantizeToBeat, beatPhase01, alignToPhase, beatDelayTime, syncTempoPct, ecoDelayFor } from '../audio/beatgrid.js';
 import { createHandTracker, startCamera } from '../camera/tracker.js';
-import { PinchDetector, Smoother, ControlRegistry, pinchRatio, clamp, expandRect, mapVideoPointInBox, parseObjectPosition, visibleVideoWindow, fitFromObjectFit, knobDragValue, knobAngle, waveDragPosition, scratchRate, jogAngleDelta, handsDistance, TwoHandSession, assignHandSlots, zoomWindow, tempoDetent } from '../gestures/logic.js';
+import { PinchDetector, Smoother, ControlRegistry, pinchRatio, clamp, expandRect, mapVideoPointInBox, parseObjectPosition, visibleVideoWindow, fitFromObjectFit, knobDragValue, knobAngle, waveDragPosition, scratchRate, jogAngleDelta, handsDistance, TwoHandSession, assignHandSlots, zoomWindow, tempoDetent, RESET_DEFAULTS, sanitizeCal, bassClash } from '../gestures/logic.js';
 import { aperture01, ClawController, clawGate } from '../gestures/claw.js';
 import { transitionValues, expressiveValues, smooth } from '../audio/transition.js';
 import { evaluateAutoDj, autoDjTriggerKey } from '../audio/autodj.js';
@@ -31,7 +31,7 @@ function deckHTML(d, i) {
   <div class="deck-head"><span class="badge">${d.name}</span><h3><span class="tname">Sin pista</span></h3><span class="time bpm">BPM —</span></div>
   <canvas class="wave" width="480" height="88"></canvas>
   <canvas class="zoomwave" width="480" height="54" title="Onda ampliada: mira si las líneas gruesas caen sobre los bombos"></canvas>
-  <div class="row"><span class="time pos">0:00</span><span class="time bpm">BPM —</span><span class="grow"></span><label class="time">Zoom <select class="zoomwin" title="Segundos visibles en la onda ampliada"><option value="4">4 s</option><option value="8" selected>8 s</option><option value="16">16 s</option></select></label><span class="time rem">-0:00</span></div>
+  <div class="row"><span class="time pos">0:00</span><span class="time bpm">BPM —</span><span class="grow"></span><label class="time zoomwrap-easy">Zoom <select class="zoomwin" title="Segundos visibles en la onda ampliada"><option value="4">4 s</option><option value="8" selected>8 s</option><option value="16">16 s</option></select></label><span class="time rem">-0:00</span></div>
   <div class="gridrow"><span class="gridstate time">Sin rejilla</span></div>
   <div class="deck-mid"><div class="jog" data-g="jog" title="Arrastra para scratch"><i></i></div><div class="transport">
   <div class="rowb">
@@ -44,7 +44,9 @@ function deckHTML(d, i) {
     <button class="btn small loopbtn dj-only" data-act="loop" title="Repite 4 tiempos desde el golpe más cercano">LOOP 4</button>
     <button class="btn small ecohold" title="Mantén pulsado: eco mientras lo sostienes; al soltar se apaga solo">ECO (mantén)</button></div></div>
   </div>
-  <div class="pads">${Array.from({ length: 8 }, (_, p) => `<button class="pad" data-pad="${p}" title="${PAD_TITLES[p]}">${PAD_LABELS[p]}</button>`).join('')}</div>`;
+  <div class="pads">${Array.from({ length: 8 }, (_, p) => `<button class="pad" data-pad="${p}" title="${PAD_TITLES[p]}">${PAD_LABELS[p]}</button>`).join('')}</div>
+  <canvas class="deckspec" width="480" height="44" title="Espectro de este deck"></canvas>
+  <div class="row"><button class="btn small pistasbtn" title="Elige la siguiente pista a pantalla completa">PISTAS</button><button class="btn small cuephones" title="Preescucha en auriculares (experimental)">PREESCUCHA</button></div>`;
 }
 decks.forEach(deckHTML);
 $('#mixer').innerHTML = `
@@ -57,7 +59,7 @@ $('#mixer').innerHTML = `
     </div>${i === 0 ? '<div class="mixmeters"><div class="leds" title="Nivel del canal A"><i class="chmeter" data-meter="0"></i></div><div class="leds" title="Nivel del canal B"><i class="chmeter" data-meter="1"></i></div></div>' : ''}`).join('')}
   </div>
   <div class="faderow"><div>VOL A<br><input class="vfader" type="range" min="0" max="1" step="0.01" value="0.85" data-g="range" data-orient="v" data-deck="0" data-param="vol" title="Volumen del canal A"></div>
-  <div class="knobwrap"><button type="button" class="knob" data-g="knob" data-param="master" aria-label="Volumen master"><span class="knob-dial"><i></i></span></button><label>MASTER</label><input class="knob-state" type="range" min="0" max="1" step="0.01" value="0.85" data-g="range" data-param="master" data-display="pct" hidden></div>
+  <div class="knobwrap"><button type="button" class="knob" data-g="knob" data-param="master" aria-label="Volumen master"><span class="knob-dial"><i></i></span></button><label>MASTER</label><span class="knobval"></span><input class="knob-state" type="range" min="0" max="1" step="0.01" value="0.85" data-g="range" data-param="master" data-display="pct" hidden></div>
   <div>VOL B<br><input class="vfader" type="range" min="0" max="1" step="0.01" value="0.85" data-g="range" data-orient="v" data-deck="1" data-param="vol" title="Volumen del canal B"></div></div>
   <div class="crossbox"><label style="display:block;text-align:center;font-size:11px">CROSSFADER</label>
   <input id="cross" type="range" min="-1" max="1" step="0.01" value="0" data-g="range" data-param="cross" title="Mezcla entre el deck A y el B">
@@ -75,8 +77,10 @@ $('#mixer').innerHTML = `
 let spectrumOn = localStorage.getItem('motiondj-spectrum') !== '0', spectrumBuf = null, spectrumFrame = 0;
 const spectrumPeaks = new Float32Array(64);
 function drawSpectrum() {
+  // La franja master se retiro (P2): el espectro vive ahora en cada deck.
   const wrap = $('#spectrumWrap');
-  if (!wrap) return;
+  if (wrap) wrap.style.display = 'none';
+  return;
   const show = spectrumOn && document.body.dataset.view !== 'easy';
   wrap.style.display = show ? '' : 'none';
   if (!show || !engine) return;
@@ -116,13 +120,15 @@ $('#btnSpectrum').setAttribute('aria-pressed', spectrumOn);
 function knobHTML(i, p, label, mn, mx, step, v, unit, cls = '') {
   const disp = (p === 'trim' || p === 'eco') ? 'pct' : '';
   const titles = { eco: 'Repite el sonido al ritmo de la canción. Súbelo para más eco', filter: 'Gira a un lado para quitar agudos, al otro para quitar graves. Centro = normal', low: 'Graves del canal', mid: 'Medios del canal', high: 'Agudos del canal', trim: 'Volumen de entrada del canal' };
-  return `<div class="knobwrap ${cls}"><button type="button" class="knob${p === 'filter' ? ' knob-filter' : ''}" style="--kc:var(--${i === 1 ? 'b' : 'a'})" data-g="knob" data-deck="${i}" data-param="${p}" aria-label="${label}, Deck ${'AB'[i]}" title="${titles[p] || label}"><span class="knob-dial"><i></i></span></button><label>${label}</label><input class="knob-state" type="range" min="${mn}" max="${mx}" step="${step}" value="${v}" data-g="range" data-deck="${i}" data-param="${p}" data-unit="${unit}" data-display="${disp}" hidden></div>`;
+  return `<div class="knobwrap ${cls}"><button type="button" class="knob${p === 'filter' ? ' knob-filter' : ''}" style="--kc:var(--${i === 1 ? 'b' : 'a'})" data-g="knob" data-deck="${i}" data-param="${p}" aria-label="${label}, Deck ${'AB'[i]}" title="${titles[p] || label}"><span class="knob-dial"><i></i></span></button><label>${label}</label><span class="knobval"></span><input class="knob-state" type="range" min="${mn}" max="${mx}" step="${step}" value="${v}" data-g="range" data-deck="${i}" data-param="${p}" data-unit="${unit}" data-display="${disp}" hidden></div>`;
 }
 function ensureEngine() {
-  if (!engine) { engine = new AudioEngine(); status('Audio activado. Carga demos o importa música.'); }
-  if (engine.ctx.state === 'suspended') engine.ctx.resume();
+  if (!(window.AudioContext || window.webkitAudioContext)) { status('Este navegador no soporta Web Audio: prueba Chrome o Edge actualizados. Mouse y cámara pueden verse, pero no habrá sonido.'); return null; }
+  if (!engine) { engine = new AudioEngine(); status('Audio activado. Carga demos o importa música.'); engine.ensureScrub(scrubWorkletUrl); }
+  if (engine.ctx.state === 'suspended') { engine.ctx.resume(); status('Audio en pausa por el navegador: pulsa «Activar audio» o cualquier botón de la mesa para despertarlo.'); }
   return engine;
 }
+window.addEventListener('error', e => { const s = $('#status'); if (s) s.textContent = `Algo falló (${(e.message || 'error').slice(0, 90)}). La música y los controles siguen: si se repite, anota qué estabas haciendo.`; });
 $('#gAudio').onclick = ensureEngine;
 function drawWave(d) {
   const cv = d.el.querySelector('.wave'), ctx = cv.getContext('2d');
@@ -172,13 +178,144 @@ function drawZoomWave(d) {
   (d.hotcues || []).forEach(h => { if (h !== null && h >= start && h <= end) { ctx.fillStyle = '#facc15'; ctx.fillRect((h - start) / (end - start) * cv.width, 0, 2, 10); } });
   ctx.fillStyle = '#fff'; ctx.fillRect(frac * cv.width, 0, 2, cv.height);
 }
+// Espectro por deck (P2): usa el AnalyserNode del canal, color del deck,
+// buffer reutilizado. Sustituye a la franja de espectro del master.
+const deckSpecBufs = [null, null];
+function drawDeckSpectrum(d, i) {
+  const cv = d.el.querySelector('.deckspec'); if (!cv || !engine || !spectrumOn) { if (cv) cv.style.display = spectrumOn ? '' : 'none'; return; }
+  cv.style.display = '';
+  const an = engine.decks[i].analyser;
+  if (!deckSpecBufs[i] || deckSpecBufs[i].length !== an.frequencyBinCount) deckSpecBufs[i] = new Uint8Array(an.frequencyBinCount);
+  const buf = deckSpecBufs[i];
+  an.getByteFrequencyData(buf);
+  const ctx = cv.getContext('2d'), W = cv.width, H = cv.height, bars = 40;
+  ctx.clearRect(0, 0, W, H); ctx.fillStyle = 'rgba(4,12,18,.9)'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = i === 0 ? '#22d3ee' : '#f472b6';
+  const nyq = engine.ctx.sampleRate / 2;
+  for (let b = 0; b < bars; b++) {
+    const f0 = 40 * Math.pow(nyq / 40, b / bars), f1 = 40 * Math.pow(nyq / 40, (b + 1) / bars);
+    const i0 = Math.max(1, Math.floor(f0 / nyq * buf.length)), i1 = Math.max(i0 + 1, Math.floor(f1 / nyq * buf.length));
+    let mx = 0; for (let k = i0; k < i1 && k < buf.length; k++) if (buf[k] > mx) mx = buf[k];
+    const v = Math.min(1, (mx / 255) * (0.55 + 0.75 * (b / bars))), w = W / bars;
+    ctx.globalAlpha = 0.9; ctx.fillRect(b * w + 1, H - v * H, w - 2, v * H);
+  }
+  ctx.globalAlpha = 1;
+}
+// ---------- Preescucha en auriculares (P3.c, experimental) ----------
+// Diagnostico (verificado en codigo): la version anterior llamaba a
+// enumerateDevices() SIN ningun permiso previo. Chrome, sin un permiso de
+// captura o sin selectAudioOutput, oculta nombres e ids: por eso solo se
+// veia una "Salida 1" sin nombre aunque Windows tenga 4 salidas. Ahora:
+// 1) selectAudioOutput si existe (el usuario elige y concede el permiso),
+// 2) si no, permiso breve de microfono para desbloquear la lista con nombres.
+import { normalizeOutputs, resolveSavedCue, cueBlockReason, cueStateText } from '../audio/cue-output.js';
+let cueStreamReady = false, cueDevices = [], cueChoice = null;
+try { cueChoice = JSON.parse(localStorage.getItem('motiondj-cue-device') || 'null'); } catch { cueChoice = null; }
+function cueSave() { try { cueChoice ? localStorage.setItem('motiondj-cue-device', JSON.stringify(cueChoice)) : localStorage.removeItem('motiondj-cue-device'); } catch {} }
+function cueLatencyText() {
+  if (!engine) return '';
+  const lat = (engine.ctx.outputLatency || 0) + (engine.ctx.baseLatency || 0);
+  return ` Latencia del contexto: ${Math.round(lat * 1000)} ms (la ruta MediaStream+<audio> suma su propio buffer; la diferencia óptica/jack no se puede medir desde el navegador).`;
+}
+async function cueApplySink() {
+  if (!cueChoice?.deviceId) return false;
+  try { await $('#cueAudio').setSinkId(cueChoice.deviceId); return true; }
+  catch { $('#cueStatus').textContent = `«${cueChoice.label || 'La salida guardada'}» no aceptó la preescucha (¿desconectada o desactivada en Windows?). Conecta los auriculares y pulsa «Elegir auriculares…» otra vez.`; return false; }
+}
+async function cueSetup() {
+  ensureEngine(); if (!engine || cueStreamReady) return;
+  const au = $('#cueAudio');
+  au.srcObject = engine.cueDest.stream;
+  au.volume = Number($('#cueVol').value);
+  cueStreamReady = true;
+  if (cueChoice?.deviceId) {
+    const ok = await cueApplySink();
+    $('#cueStatus').textContent = ok
+      ? `Auriculares guardados: «${cueChoice.label || 'sin nombre'}». Pulsa PREESCUCHA en el deck que no suena.${cueLatencyText()}`
+      : $('#cueStatus').textContent;
+  } else {
+    $('#cueStatus').textContent = `Elige primero tus auriculares con «Elegir auriculares…»: la mezcla sigue en tus parlantes y la preescucha saldrá por el jack.${cueLatencyText()}`;
+  }
+}
+function cueFillSelect() {
+  const sel = $('#cueDevice'); if (!sel) return;
+  const savedOpt = cueChoice?.deviceId && !cueDevices.some(d => d.deviceId === cueChoice.deviceId)
+    ? `<option value="${cueChoice.deviceId}">Guardado: ${cueChoice.label || 'sin nombre'} (sin verificar)</option>` : '';
+  sel.innerHTML = '<option value="">Elegir en la lista…</option>' + savedOpt + cueDevices.map(d => `<option value="${d.deviceId}">${d.displayName}${d.isAlias ? ' (= salida de la mezcla del sistema)' : ''}</option>`).join('');
+  if (cueChoice?.deviceId) sel.value = cueChoice.deviceId;
+}
+async function cueEnumerateWithPermission() {
+  // Desbloquea nombres/ids: permiso breve de microfono (se cierra al instante).
+  try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); s.getTracks().forEach(t => t.stop()); }
+  catch { /* sin microfono: se intenta enumerar igual, puede salir sin nombres */ }
+  cueDevices = normalizeOutputs(await navigator.mediaDevices.enumerateDevices());
+  return cueDevices;
+}
+$('#cueVol')?.addEventListener('input', e => { $('#cueAudio').volume = Number(e.target.value); });
+$('#btnCueDevices')?.addEventListener('click', async () => {
+  await cueSetup();
+  if (!('setSinkId' in HTMLAudioElement.prototype)) { $('#cueStatus').textContent = 'Este navegador no permite mandar un elemento de audio a otra salida (sin setSinkId): la preescucha separada no es viable aquí. Usa Chrome de escritorio.'; return; }
+  // 1) Eleccion explicita del navegador (Chrome): elige y concede permiso.
+  if (typeof navigator.mediaDevices.selectAudioOutput === 'function') {
+    try {
+      const dev = await navigator.mediaDevices.selectAudioOutput();
+      if (dev?.deviceId) {
+        cueChoice = { deviceId: dev.deviceId, label: dev.label || '' };
+        cueSave();
+        await cueEnumerateWithPermission().catch(() => { cueDevices = []; });
+        cueFillSelect();
+        const block = cueBlockReason(cueChoice, cueDevices);
+        if (block === 'coincide-mezcla') { $('#cueStatus').textContent = 'Has elegido la misma salida que usa la mezcla (la predeterminada del sistema): oirías todo junto. Pon en Windows la óptica como predeterminada y elige aquí el jack de auriculares.'; return; }
+        if (await cueApplySink()) $('#cueStatus').textContent = `${cueStateText({})}. Auriculares: «${cueChoice.label || 'sin nombre'}». Pulsa PREESCUCHA en el deck que no suena.${cueLatencyText()}`;
+        return;
+      }
+    } catch { /* cancelado o no permitido: se sigue con la lista */ }
+  }
+  // 2) Respaldo: enumerar con nombres tras el permiso breve.
+  try {
+    await cueEnumerateWithPermission();
+    cueFillSelect();
+    const named = cueDevices.filter(d => d.label).length;
+    const saved = resolveSavedCue(cueDevices, cueChoice);
+    if (saved.status === 'missing') $('#cueStatus').textContent = 'Los auriculares guardados ya no aparecen (¿desconectados o desactivados en Windows > Sonido?). Conéctalos y repite la búsqueda.';
+    else if (cueDevices.length <= 1) $('#cueStatus').textContent = 'Chrome sigue viendo una sola salida. Revisa en Windows > Sonido que la salida del jack esté habilitada (no solo conectada) y repite; si acabas de conectarla, recarga la página.';
+    else $('#cueStatus').textContent = `${cueDevices.length} salidas (${named} con nombre). Elige tus auriculares en la lista: en tu equipo, «Altavoces (Realtek…)» es el jack y «Realtek Digital Output» la óptica de los parlantes — la mezcla debe quedarse en la óptica.`;
+  } catch { $('#cueStatus').textContent = 'No se pudieron listar las salidas. Concede el permiso de micrófono cuando Chrome lo pida (solo se usa para ver los nombres) y reintenta.'; }
+});
+$('#cueDevice')?.addEventListener('change', async e => {
+  await cueSetup();
+  const dev = cueDevices.find(d => d.deviceId === e.target.value);
+  if (!dev) { cueChoice = null; cueSave(); return; }
+  cueChoice = { deviceId: dev.deviceId, label: dev.label };
+  cueSave();
+  const block = cueBlockReason(cueChoice, cueDevices);
+  if (block === 'coincide-mezcla') { $('#cueStatus').textContent = 'Esa es la salida de la mezcla del sistema: la preescucha iría al mismo sitio y se oiría todo junto (eco). Elige la otra salida (el jack de auriculares) o cambia en Windows cuál es la predeterminada.'; return; }
+  if (await cueApplySink()) $('#cueStatus').textContent = `Auriculares: «${dev.displayName}». Pulsa PREESCUCHA en el deck que no suena.${cueLatencyText()}`;
+});
+let cueActiveDeck = -1; // estado propio: no depender de gain.value (con el contexto suspendido no se actualiza)
+function toggleCue(i, btn) {
+  cueSetup(); if (!engine) return;
+  const ch = engine.decks[i], on = cueActiveDeck !== i;
+  if (on) {
+    const block = cueBlockReason(cueChoice, cueDevices);
+    if (block === 'sin-elegir') { $('#cueStatus').textContent = 'Antes elige tus auriculares con «Elegir auriculares…». Sin una segunda salida elegida, la preescucha se mezclaría con la música.'; return; }
+    if (block === 'coincide-mezcla') { $('#cueStatus').textContent = 'La salida elegida coincide con la de la mezcla: bloqueado para que no se oiga todo junto. Elige el jack de auriculares.'; return; }
+  }
+  engine.decks.forEach(d => d.cueSend.gain.setTargetAtTime(0, engine.ctx.currentTime, 0.03));
+  decks.forEach(d => d.el.querySelector('.cuephones')?.classList.remove('play-on'));
+  cueActiveDeck = on ? i : -1;
+  if (on) { ch.cueSend.gain.setTargetAtTime(1, engine.ctx.currentTime, 0.03); btn.classList.add('play-on'); }
+  $('#cueStatus').textContent = on
+    ? `${cueStateText({ activeDeck: i, deviceName: cueChoice?.label })} (experimental). Se oye aunque su fader esté cerrado; la grabación no la incluye.`
+    : cueStateText({});
+}
 // ---------- Biblioteca ----------
 function renderLibrary() {
   const q = $('#search').value.toLowerCase(), ul = $('#trackList'); ul.innerHTML = '';
   library.filter(t => t.name.toLowerCase().includes(q)).forEach(t => {
     const li = document.createElement('li');
     if (selectedTrack === t) li.className = 'sel';
-    li.innerHTML = `<span>${t.name}</span><span>${decks.map((d, i) => d.track === t ? `<span class="tagdeck">DECK ${'AB'[i]}</span>` : '').join('')} <button class="btn small" data-qadd title="Añadir a la cola">+ cola</button> <button class="btn small" data-qdel title="Quitar de la biblioteca">✕</button></span>`;
+    li.innerHTML = `<span>${t.name}${t.duration ? ` · ${fmt(t.duration)}` : ''}${t.metaBpm ? ` · ~${t.metaBpm.toFixed(0)} BPM` : ''}</span><span>${decks.map((d, i) => d.track === t ? `<span class="tagdeck">DECK ${'AB'[i]}</span>` : '').join('')} <button class="btn small" data-qadd title="Añadir a la cola">+ cola</button> <button class="btn small" data-qdel title="Quitar de la biblioteca">✕</button></span>`;
     li.onclick = () => { selectedTrack = t; renderLibrary(); };
     li.querySelector('[data-qadd]').onclick = (e) => { e.stopPropagation(); playQueue = enqueue(playQueue, t); renderQueue(); $('#libMsg').textContent = `En cola: ${t.name}`; };
     li.querySelector('[data-qdel]').onclick = (e) => { e.stopPropagation(); const ix = library.indexOf(t); if (ix >= 0) library.splice(ix, 1); playQueue = playQueue.filter(x => x !== t); if (selectedTrack === t) selectedTrack = null; renderLibrary(); renderQueue(); $('#libMsg').textContent = `Quitada de la biblioteca: ${t.name} (si sonaba en un deck, sigue hasta que cargues otra).`; };
@@ -186,17 +323,54 @@ function renderLibrary() {
   });
 }
 $('#search').oninput = renderLibrary;
-async function addTrack(name, blobOrUrl) {
+// Biblioteca por METADATOS (P3.5): la lista guarda nombre/duracion/BPM y la
+// referencia al archivo; el AudioBuffer (~105 MB por tema de 5 min) solo se
+// decodifica al cargar en un deck y se libera al salir de los decks.
+async function trackFile(track) {
+  if (track.file) return track.file;
+  if (track.handle) { try { return await track.handle.getFile(); } catch { return null; } }
+  return null;
+}
+async function ensureTrackBuffer(track) {
+  if (track.buffer) return track.buffer;
   ensureEngine();
-  try {
-    const buf = typeof blobOrUrl === 'string'
-      ? await (await fetch(blobOrUrl)).then(r => { if (!r.ok) throw new Error('demo no encontrada'); return r.arrayBuffer(); }).then(ab => engine.ctx.decodeAudioData(ab))
-      : await engine.decode(blobOrUrl);
-    const t = { id: crypto.randomUUID(), name, buffer: buf };
-    library.push(t); selectedTrack = t; renderLibrary();
-    $('#libMsg').textContent = `Importada: ${name}`;
-    return t;
-  } catch (e) { $('#libMsg').textContent = `Error al leer "${name}": formato no soportado o archivo dañado.`; return null; }
+  if (track.url) {
+    const ab = await (await fetch(track.url)).then(r => { if (!r.ok) throw new Error('demo no encontrada'); return r.arrayBuffer(); });
+    track.buffer = await engine.ctx.decodeAudioData(ab);
+  } else {
+    const f = await trackFile(track);
+    if (!f) throw new Error('sin archivo');
+    track.buffer = await engine.decode(f);
+  }
+  track.duration = track.buffer.duration;
+  return track.buffer;
+}
+function freeUnusedBuffers(keep) {
+  const inDecks = new Set(decks.map(d => d.track).filter(Boolean));
+  for (const t of library) if (t.buffer && !inDecks.has(t) && !keep?.includes(t)) t.buffer = null;
+}
+async function addTrack(name, blobOrUrl) {
+  // Demos (URL): se decodifican al momento por compatibilidad; archivos del
+  // usuario: solo metadatos, sin decodificar (memoria bajo control).
+  if (typeof blobOrUrl === 'string') {
+    ensureEngine();
+    try {
+      const t = { id: crypto.randomUUID(), name, url: blobOrUrl, buffer: null, duration: null };
+      await ensureTrackBuffer(t);
+      library.push(t); selectedTrack = t; renderLibrary();
+      $('#libMsg').textContent = `Importada: ${name}`;
+      return t;
+    } catch (e) { $('#libMsg').textContent = `Error al leer "${name}": formato no soportado o archivo dañado.`; return null; }
+  }
+  const t = { id: crypto.randomUUID(), name, file: blobOrUrl, buffer: null, duration: null };
+  library.push(t); selectedTrack = t;
+  const objUrl = URL.createObjectURL(blobOrUrl);
+  const au = new Audio();
+  au.onloadedmetadata = () => { t.duration = au.duration; URL.revokeObjectURL(objUrl); renderLibrary(); };
+  au.src = objUrl;
+  renderLibrary();
+  $('#libMsg').textContent = `Añadida: ${name} (se decodifica solo al cargarla en un deck).`;
+  return t;
 }
 $('#fileImport').onchange = async e => { for (const f of e.target.files) await addTrack(f.name, f); e.target.value = ''; };
 $('#btnDemo').onclick = async () => {
@@ -204,10 +378,14 @@ $('#btnDemo').onclick = async () => {
   await addTrack('Demo A — House 122 BPM (generada)', '/audio/demo-a.wav');
   await addTrack('Demo B — Electro 124 BPM (generada)', '/audio/demo-b.wav');
 };
-async function loadToDeck(i, track = selectedTrack) {
-  if (!track) { $('#libMsg').textContent = 'Selecciona primero una pista de la lista.'; return; }
+let lastUndoLoad = null; // {deck, prev} para deshacer con Esc mientras no suene
+async function loadToDeck(i, track = selectedTrack, skipConfirm = false) {
+  if (!track) { $('#libMsg').textContent = 'Selecciona primero una pista de la lista.'; return false; }
   ensureEngine(); const ch = engine.decks[i], d = decks[i];
-  if (ch.playing) { if (!confirm(`El deck ${d.name} está sonando. ¿Detenerlo y reemplazar la pista?`)) return; }
+  if (ch.playing && !skipConfirm) { if (!confirm(`El deck ${d.name} está sonando. ¿Detenerlo y reemplazar la pista?`)) return false; }
+  try { await ensureTrackBuffer(track); }
+  catch { $('#libMsg').textContent = `No se pudo leer "${track.name}": formato no soportado, archivo dañado o sin permiso (reabre la carpeta).`; status(`No se pudo cargar "${track.name}".`); return false; }
+  lastUndoLoad = { deck: i, prev: d.track };
   ch.load(track.buffer); d.track = track; d.hotcues = Array(8).fill(null);
   d.loop = null; ch.clearLoop();
   d.el.querySelectorAll('.pad').forEach((b, p) => { b.classList.remove('set'); b.textContent = padLabel(p); });
@@ -219,8 +397,11 @@ async function loadToDeck(i, track = selectedTrack) {
   d.grid = analyzeBeatgrid(track.buffer.getChannelData(0), track.buffer.sampleRate);
   d.bpm = d.grid?.bpm || null; d.taps = [];
   d.el.querySelector('.tname').textContent = track.name;
+  track.metaBpm = d.bpm;
+  freeUnusedBuffers([track]);
   updateGridUI(d);
   drawWave(d); renderLibrary(); status(`Pista cargada en deck ${d.name}. No suena hasta pulsar PLAY.`);
+  return true;
 }
 function updateGridUI(d) {
   // Solo lectura (Etapa 13): BPM estimado y estado de la rejilla, sin controles.
@@ -352,6 +533,112 @@ function nextInQueue(manual = true) {
   status(`Siguiente: «${taken.track.name}» cargada en el deck ${decks[target].name} (no suena hasta PLAY o Auto DJ).`);
   return true;
 }
+// ---------- Demo guiada y guardarraíl de graves (P4) ----------
+const DEMO_STEPS = [
+  '1. Pulsa «Activar audio» y luego «Cargar demos»: son dos pistas generadas por la app, sin música con derechos.',
+  '2. Carga la Demo A con LOAD A (o desde PISTAS en el deck) y pulsa PLAY. Haz lo mismo con la Demo B en el otro deck, sin darle a PLAY todavía.',
+  '3. Activa la cámara y los gestos. Haz una pinza sobre el CROSSFADER y muévela: mezclas con la mano, sin tocar el ratón.',
+  '4. En Vista fácil, pulsa «Igualar y mezclar»: iguala el tempo y hace la mezcla suave sola. En Vista DJ, el botón SYNC hace el tempo y la fase.',
+  '5. Prueba una perilla con la pinza: apunta al LOW, pinza y arrastra en horizontal. La barra muestra el valor y al soltar se queda.',
+  '6. Busca con el jog: gira el centro del jog del deck parado para oír la pista hacia delante y hacia atrás; gira el borde para empujar el tempo.',
+  '7. Termina grabando: pulsa «Grabar mezcla», haz una mezcla corta y vuelve a pulsar para descargar el archivo. ¡Fin de la demo!'
+];
+let demoIx = -1;
+function demoShow() { $('#demoGuide').hidden = demoIx < 0; if (demoIx >= 0) $('#demoStep').textContent = DEMO_STEPS[demoIx]; }
+$('#btnDemoGuide').onclick = () => { demoIx = 0; demoShow(); status('Demo guiada: sigue los pasos en pantalla. No cambia el audio por ti.'); };
+$('#demoNext').onclick = () => { demoIx = Math.min(DEMO_STEPS.length - 1, demoIx + 1); demoShow(); };
+$('#demoPrev').onclick = () => { demoIx = Math.max(0, demoIx - 1); demoShow(); };
+$('#demoExit').onclick = () => { demoIx = -1; demoShow(); };
+function checkBassWarn() {
+  const bw = $('#bassWarn'); if (!bw) return;
+  const low = i => Number(document.querySelector(`input.knob-state[data-param="low"][data-deck="${i}"]`)?.value || 0);
+  bw.style.visibility = bassClash(low(0), low(1), Number($('#cross')?.value || 0)) ? 'visible' : 'hidden';
+}
+// ---------- Selector PISTAS a pantalla completa (P3.5.b) ----------
+const picker = { deck: 0, start: 0, pageSize: 7, selectedId: null, holdTimer: null };
+function saveOrder() { try { localStorage.setItem('motiondj-order', JSON.stringify(library.map(t => t.name))); } catch {} }
+function applySavedOrder() { try { const ord = JSON.parse(localStorage.getItem('motiondj-order') || '[]'); library.sort((a, b) => { const ia = ord.indexOf(a.name), ib = ord.indexOf(b.name); return (ia < 0 ? 9999 : ia) - (ib < 0 ? 9999 : ib); }); } catch {} }
+function openTrackPicker(i) {
+  picker.deck = i; picker.start = 0; picker.selectedId = null;
+  $('#trackPicker').hidden = false;
+  $('#pickerTitle').textContent = `Elegir pista para el deck ${'AB'[i]}`;
+  renderPicker(); rebuildRegistry();
+}
+function closeTrackPicker() { $('#trackPicker').hidden = true; if (picker.holdTimer) { clearTimeout(picker.holdTimer); picker.holdTimer = null; } rebuildRegistry(); }
+function renderPicker() {
+  const list = $('#pickerList'); if (!list) return;
+  const total = library.length;
+  picker.start = Math.max(0, Math.min(picker.start, Math.max(0, total - picker.pageSize)));
+  list.innerHTML = '';
+  library.slice(picker.start, picker.start + picker.pageSize).forEach((t, off) => {
+    const ix = picker.start + off, b = document.createElement('button');
+    b.className = 'pickcard' + (picker.selectedId === t.id ? ' sel' : '');
+    b.innerHTML = `<span class="num">${ix + 1}</span><span>${t.name}${t.duration ? ` · ${fmt(t.duration)}` : ''}${t.metaBpm ? ` · ~${t.metaBpm.toFixed(0)} BPM` : ''}</span>${decks.map((d, di) => d.track === t ? `<span class="tagdeck">${'AB'[di]}${engine?.decks[di].playing ? ' (sonando)' : ''}</span>` : '').join('')}`;
+    const choose = async () => {
+      picker.selectedId = t.id;
+      const ok = await loadToDeck(picker.deck, t, engine?.decks[picker.deck].playing);
+      if (ok) closeTrackPicker();
+    };
+    b.addEventListener('pointerdown', () => {
+      picker.selectedId = t.id; renderPickerSel();
+      if (engine?.decks[picker.deck].playing) {
+        b.classList.add('holding');
+        $('#pickerHint').textContent = `Mantén para reemplazar el deck ${'AB'[picker.deck]} (está sonando)…`;
+        picker.holdTimer = setTimeout(choose, 1000);
+      }
+    });
+    b.addEventListener('pointerup', () => { if (picker.holdTimer) { clearTimeout(picker.holdTimer); picker.holdTimer = null; b.classList.remove('holding'); } else if (!engine?.decks[picker.deck].playing) { b._choseAt = Date.now(); choose(); } else { picker.selectedId = t.id; } });
+    b.addEventListener('click', () => { if (Date.now() - (b._choseAt || 0) > 400 && !engine?.decks[picker.deck].playing) choose(); }); // pinza/clic sintetico
+    b.addEventListener('pointerleave', () => { if (picker.holdTimer) { clearTimeout(picker.holdTimer); picker.holdTimer = null; b.classList.remove('holding'); } });
+    list.appendChild(b);
+  });
+  const rg = $('#pickerRange'); rg.max = Math.max(0, total - 1); rg.value = picker.start;
+  $('#pickerPos').textContent = total ? `pista ${picker.start + 1}–${Math.min(total, picker.start + picker.pageSize)} de ${total}` : 'sin pistas: importa música o elige una carpeta';
+  rebuildRegistry();
+}
+function renderPickerSel() { document.querySelectorAll('.pickcard').forEach((c, ix) => c.classList.toggle('sel', library[picker.start + ix]?.id === picker.selectedId)); }
+$('#pickerRange')?.addEventListener('input', e => { picker.start = Number(e.target.value); renderPicker(); });
+$('#pickerPrev').onclick = () => { picker.start -= picker.pageSize; renderPicker(); };
+$('#pickerNext').onclick = () => { picker.start += picker.pageSize; renderPicker(); };
+$('#pickerClose').onclick = closeTrackPicker;
+function moveSelected(dir) {
+  const ix = library.findIndex(t => t.id === picker.selectedId);
+  if (ix < 0) { $('#pickerHint').textContent = 'Primero toca una pista para elegirla y luego muévela con ▲/▼ orden.'; return; }
+  const jx = ix + dir; if (jx < 0 || jx >= library.length) return;
+  [library[ix], library[jx]] = [library[jx], library[ix]];
+  picker.start = Math.max(0, Math.min(picker.start, jx)); saveOrder(); renderPicker(); renderLibrary();
+}
+$('#pickerUp').onclick = () => moveSelected(-1);
+$('#pickerDown').onclick = () => moveSelected(1);
+// ---------- Carpeta de musica persistente (P3.5.a, IndexedDB) ----------
+function idbSet(key, val) { return new Promise(res => { const rq = indexedDB.open('motiondj', 1); rq.onupgradeneeded = () => rq.result.createObjectStore('kv'); rq.onsuccess = () => { const tx = rq.result.transaction('kv', 'readwrite'); tx.objectStore('kv').put(val, key); tx.oncomplete = () => res(true); }; rq.onerror = () => res(false); }); }
+function idbGet(key) { return new Promise(res => { const rq = indexedDB.open('motiondj', 1); rq.onupgradeneeded = () => rq.result.createObjectStore('kv'); rq.onsuccess = () => { const g = rq.result.transaction('kv').objectStore('kv').get(key); g.onsuccess = () => res(g.result || null); g.onerror = () => res(null); }; rq.onerror = () => res(null); }); }
+async function scanFolder(handle) {
+  let count = 0;
+  for await (const entry of handle.values()) {
+    if (entry.kind === 'file' && /\.(mp3|wav|ogg|m4a|flac)$/i.test(entry.name) && !library.some(t => t.name === entry.name)) {
+      library.push({ id: crypto.randomUUID(), name: entry.name, handle: entry, buffer: null, duration: null }); count++;
+    }
+  }
+  applySavedOrder(); renderLibrary();
+  $('#libMsg').textContent = count ? `Carpeta abierta: ${count} pista(s) nuevas en la lista (se decodifican al cargarlas).` : 'Carpeta abierta: sin pistas nuevas que añadir.';
+}
+$('#btnFolder')?.addEventListener('click', async () => {
+  if (!window.showDirectoryPicker) { $('#libMsg').textContent = 'Este navegador no permite elegir una carpeta (sin File System Access): usa «Importar música». Chrome/Edge de escritorio sí.'; return; }
+  try {
+    const handle = await window.showDirectoryPicker();
+    await idbSet('folder', handle);
+    await scanFolder(handle);
+  } catch { /* cancelado por el usuario */ }
+});
+$('#btnFolderOpen')?.addEventListener('click', async () => {
+  const handle = await idbGet('folder');
+  if (!handle) { $('#libMsg').textContent = 'Todavía no hay carpeta guardada: elige una con «Elegir carpeta».'; return; }
+  try {
+    if (await handle.requestPermission({ mode: 'read' }) !== 'granted') { $('#libMsg').textContent = 'Sin permiso para la carpeta guardada: concédelo o elige otra.'; return; }
+    await scanFolder(handle);
+  } catch { $('#libMsg').textContent = 'La carpeta guardada ya no está disponible (¿movida o disco desconectado?). Elige otra.'; }
+});
 $('#btnNextTrack')?.addEventListener('click', () => nextInQueue(true));
 $('#btnEasyMix')?.addEventListener('click', () => {
   ensureEngine();
@@ -367,6 +654,8 @@ $('#btnEasyMix')?.addEventListener('click', () => {
 decks.forEach((d, i) => {
   d.el.addEventListener('click', e => {
     const act = e.target.dataset?.act, pad = e.target.dataset?.pad;
+    if (e.target.classList.contains('cuephones')) { toggleCue(i, e.target); return; }
+    if (e.target.classList.contains('pistasbtn')) { openTrackPicker(i); return; }
     if (act) deckAction(i, act, e.target);
     if (pad !== undefined) { if (e.shiftKey) deleteCue(i, Number(pad), e.target); else padAction(i, Number(pad), e.target); }
   });
@@ -379,7 +668,8 @@ decks.forEach((d, i) => {
     if (!engine || !d.track) return;
     ensureEngine();
     const r = jog.getBoundingClientRect();
-    startScratch('mouse' + i, i, e.clientY);
+    const distC = Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2));
+    startScratch('mouse' + i, i, e.clientY, distC > r.width * 0.36); // borde = empuje; plato = busqueda
     const s = scratches.get('mouse' + i);
     if (s) { s.cx = r.left + r.width / 2; s.cy = r.top + r.height / 2; s.lastA = Math.atan2(e.clientY - s.cy, e.clientX - s.cx); }
     try { jog.setPointerCapture(e.pointerId); } catch {}
@@ -449,7 +739,23 @@ function applyCal(save = true) {
   const kv = $('#calKnobVal'); if (kv) kv.textContent = $('#calKnob')?.value || 220;
   if (save) localStorage.setItem('motiondj-cal', JSON.stringify({ s, x, y, size: $('#calSize').value, sens: $('#calSens').value, knob: $('#calKnob')?.value || 220 }));
 }
-try { const c = JSON.parse(localStorage.getItem('motiondj-cal') || 'null'); if (c) { $('#calScale').value = c.s; $('#calX').value = c.x; $('#calY').value = c.y; $('#calSize').value = c.size; $('#calSens').value = c.sens; if (c.knob && $('#calKnob')) $('#calKnob').value = c.knob; } } catch {}
+try { const c = sanitizeCal(JSON.parse(localStorage.getItem('motiondj-cal') || 'null')); $('#calScale').value = c.s; $('#calX').value = c.x; $('#calY').value = c.y; $('#calSize').value = c.size; $('#calSens').value = c.sens; if ($('#calKnob')) $('#calKnob').value = c.knob; } catch { /* calibracion corrupta: se ignoran los valores y se usan los de fabrica */ }
+// Restablecer (P1): calibracion y mezclador a fabrica, sin recargar y sin
+// tocar las pistas cargadas ni lo que esta sonando.
+function resetAll() {
+  const c = RESET_DEFAULTS.cal;
+  $('#calScale').value = c.scale; $('#calX').value = c.x; $('#calY').value = c.y; $('#calSens').value = c.sens; $('#calSize').value = c.size; if ($('#calKnob')) $('#calKnob').value = c.knob;
+  localStorage.removeItem('motiondj-cal'); applyCal(false);
+  document.querySelectorAll('input[data-param]').forEach(inp => {
+    const p = inp.dataset.param;
+    if (!(p in RESET_DEFAULTS.params)) return;
+    inp.value = RESET_DEFAULTS.params[p];
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  decks.forEach(d => { const tv = d.el.querySelector('.tempoval'); if (tv) tv.textContent = '+0.0%'; });
+  syncAllKnobs(); fitConsole();
+  status('Restablecido: calibración y mezclador a valores de fábrica. Las pistas y la música no se tocaron.');
+}
 ['calScale', 'calX', 'calY', 'calSize', 'calSens', 'calHit', 'calOpacity', 'calKnob'].forEach(id => { const el = $('#' + id); if (el) el.addEventListener('input', () => applyCal()); });
 // ---------- Vistas Facil / DJ (mismo estado y motor; solo cambia visibilidad) ----------
 function setView(v) { requestAnimationFrame(() => { if (typeof hands !== 'undefined') hands.forEach(h => { h.smoothX.reset(); h.smoothY.reset(); }); if (typeof fitConsole === 'function') fitConsole(); if (typeof rebuildRegistry === 'function') rebuildRegistry(); });
@@ -461,6 +767,7 @@ $('#btnViewEasy').onclick = () => setView('easy'); $('#btnViewDJ').onclick = () 
 setView(localStorage.getItem('motiondj-view') || 'dj');
 applyCal(false);
 let locked = false;
+$('#btnReset').onclick = () => resetAll();
 $('#btnLock').onclick = e => { locked = !locked; ['calScale', 'calX', 'calY'].forEach(id => $('#' + id).disabled = locked); e.target.textContent = locked ? 'Desbloquear mesa' : 'Bloquear mesa'; };
 let zoomed = false;
 $('#btnZoomMixer').onclick = e => { zoomed = !zoomed; consoleEl.style.gridTemplateColumns = zoomed ? '0.6fr 1.4fr 0.6fr' : ''; e.target.textContent = zoomed ? 'Vista normal' : 'Ampliar mixer'; };
@@ -637,7 +944,7 @@ function rebuildRegistry() {
   registry.controls.clear();
   const pad = Number($('#calHit')?.value || 16), sr = stage.getBoundingClientRect();
   // TODOS los controles de la mesa: sliders, botones (PLAY/CUE/SYNC/LOOP/pads/modo) y onda.
-  document.querySelectorAll('.console [data-g], .console button, .console .wave, #fxPalette [data-fx-card]').forEach((el, idx) => {
+  document.querySelectorAll('.console [data-g], .console button, .console .wave, #fxPalette [data-fx-card], #trackPicker .pickcard, #trackPicker [data-g]').forEach((el, idx) => {
     const r = el.getBoundingClientRect();
     if (!r.width) return;
     if (!el._gid) el._gid = `ctl-${idx}-${el.dataset.param || el.dataset.act || el.className}`;
@@ -686,11 +993,17 @@ function setRangeFromPoint(el, x, y) {
 const knobDrags = new Map(); let knobBarTimer = null;
 function knobInput(knob) { return knob?.closest('.knobwrap')?.querySelector('.knob-state') || null; }
 function knobPx() { return Number($('#calKnob')?.value || 220); }
+function fmtKnobVal(inp, v) {
+  if (inp.dataset.display === 'pct') return inp.dataset.param === 'trim' ? `${Math.round(v * 100)}%` : `${Math.round(v / (Number(inp.max) || 1) * 100)}%`;
+  if (inp.dataset.unit === 'dB') return `${v > 0 ? '+' : ''}${v} dB`;
+  return `${Math.round(v)}`;
+}
 function syncKnob(knob) {
   const inp = knobInput(knob); if (!inp) return;
   const v = Number(inp.value), mn = Number(inp.min), mx = Number(inp.max), f = mx > mn ? (v - mn) / (mx - mn) : 0;
   knob.style.setProperty('--ang', knobAngle(v, mn, mx) + 'deg');
   knob.style.setProperty('--frac', f);
+  const kv = knob.closest('.knobwrap')?.querySelector('.knobval'); if (kv) kv.textContent = fmtKnobVal(inp, v);
   if ([...knobDrags.values()].some(d => d.knob === knob)) showKnobBar(inp, knob, true);
 }
 function syncAllKnobs() { document.querySelectorAll('.knob').forEach(syncKnob); }
@@ -800,25 +1113,41 @@ function endWaveDragGesture(hand) {
   if (drag && engine && decks[drag.deck].track) applyWaveTarget(drag.deck, waveTarget(drag.deck, drag.pos, 0));
   waveDrags.delete(hand);
 }
-// ---------- Scratch minimo (velocidad del jog, sin reverse) ----------
-// AudioBufferSourceNode no admite rate negativo: girar "hacia atras" lleva
-// el rate a ~0 en vez de sonar al reves. El reverse real exige AudioWorklet
-// (pendiente, ver docs/estado.md). Al soltar se vuelve al rate del deck con
-// la rampa de setRate (~30 ms) y position() sigue continua.
+// ---------- Jog: busqueda/scrub (plato), empuje (borde) y respaldo ----------
+// El plato usa el AudioWorklet de scrub (P3.a): suena hacia delante y hacia
+// atras con posicion continua. El borde aplica un empuje temporal de
+// velocidad y al soltar vuelve EXACTAMENTE al rate previo. Si el worklet no
+// carga, queda el scratch minimo anterior por velocidad (solo hacia delante).
+const scrubWorkletUrl = '/worklets/scrub-processor.js'; // en public/: URL real para audioWorklet.addModule
+import { jogSpeed, nudgeFactor } from '../audio/scrub.js';
 const scratches = new Map();
-function startScratch(key, i, y) {
+function jogSecPerRev() { return Number($('#calJogSec')?.value || 1.8); }
+function startScratch(key, i, y, rim = false) {
   if (i < 0 || !engine) return;
   ensureEngine(); const ch = engine.decks[i];
   if (!ch.buffer || scratches.has(key)) return;
+  if (rim) {
+    scratches.set(key, { deck: i, mode: 'nudge', baseRate: ch.rate, lastY: y, lastT: performance.now(), rev: 0 });
+    status(`Empuje deck ${decks[i].name}: gira el borde para empujar el tempo; al soltar vuelve solo a su sitio.`);
+    return;
+  }
+  if (ch.scrubNode && ch.startScrub()) {
+    scratches.set(key, { deck: i, mode: 'scrub', baseRate: ch.rate, wasPaused: !ch._scrubWasPlaying, lastY: y, lastT: performance.now(), rev: 0 });
+    status(`Búsqueda deck ${decks[i].name}: gira el plato para buscar el punto (suena en ambos sentidos); suelta para dejarlo ahí.`);
+    return;
+  }
   const wasPaused = !ch.playing;
   if (wasPaused) ch.play();
-  scratches.set(key, { deck: i, baseRate: ch.rate, wasPaused, lastY: y, lastT: performance.now(), rev: 0 });
-  status(`Scratch deck ${decks[i].name}: mueve para girar el disco; suelta para volver a la velocidad normal.`);
+  scratches.set(key, { deck: i, mode: 'legacy', baseRate: ch.rate, wasPaused, lastY: y, lastT: performance.now(), rev: 0 });
+  status(`Scratch (respaldo) deck ${decks[i].name}: el worklet no cargó; solo hacia delante.`);
 }
 function applyScratchRev(key, rev) {
   const s = scratches.get(key); if (!s || !engine) return;
   s.rev = 0.55 * rev + 0.45 * s.rev;
-  engine.decks[s.deck].setRate(scratchRate(s.rev, s.baseRate));
+  const ch = engine.decks[s.deck];
+  if (s.mode === 'scrub') ch.setScrubSpeed(jogSpeed(s.rev, jogSecPerRev()));
+  else if (s.mode === 'nudge') ch.setRate(s.baseRate * nudgeFactor(s.rev));
+  else ch.setRate(scratchRate(s.rev, s.baseRate));
 }
 function moveScratchGesture(key, y) {
   const s = scratches.get(key); if (!s) return;
@@ -832,7 +1161,12 @@ function endScratch(key) {
   scratches.delete(key);
   if (!engine) return;
   const ch = engine.decks[s.deck];
-  if (s.wasPaused) ch.pause(); // queda pausado en la posicion alcanzada
+  if (s.mode === 'scrub') {
+    ch.endScrub();
+    if (s.wasPaused && $('#calSnap')?.checked && decks[s.deck].grid) ch.seek(quantizeToBeat(ch.position(), decks[s.deck].grid));
+  }
+  else if (s.mode === 'nudge') ch.setRate(s.baseRate); // regreso exacto
+  else if (s.wasPaused) ch.pause();
   else ch.setRate(s.baseRate);
 }
 function endAllScratches() { for (const k of [...scratches.keys()]) endScratch(k); }
@@ -848,10 +1182,15 @@ function triggerEl(el, x) {
 async function enableCamera() {
   try {
     await startCamera(video); $('#noCam').style.display = 'none'; $('#chipCam').textContent = 'Cámara: activa'; $('#chipCam').classList.add('on');
-    status('Cámara activa. Cargando modelo de manos (primera vez requiere internet)…');
-    tracker = await createHandTracker(video, () => status('MediaPipe no pudo cargar. Revisa internet la primera vez; mouse/teclado siguen activos.'));
-    status(tracker ? 'Manos listas. Activa Gestos y haz una pinza sobre un control.' : 'Sin tracker de manos; mouse/teclado activos.');
-  } catch (e) { status('Permiso de cámara denegado o no disponible. Usa mouse/teclado.'); }
+    status('Cámara activa. Cargando el modelo de manos local…');
+    tracker = await createHandTracker(video, () => status('El modelo de manos no pudo cargar ni en local ni desde el CDN. La mesa sigue usable con mouse, teclado y táctil.'));
+    status(tracker ? 'Manos listas. Activa Gestos y haz una pinza sobre un control.' : 'Sin seguimiento de manos; mouse/teclado activos.');
+  } catch (e) {
+    if (!navigator.mediaDevices?.getUserMedia) status('Este navegador no permite usar la cámara (sin getUserMedia o sin HTTPS). La mesa sigue completa con mouse, teclado y táctil.');
+    else if (e?.name === 'NotAllowedError') status('Permiso de cámara denegado: permite la cámara en el candado de la barra de direcciones y vuelve a pulsar «Activar cámara». Sin cámara, todo funciona con mouse/teclado.');
+    else if (e?.name === 'NotFoundError' || e?.name === 'OverconstrainedError') status('No se encontró cámara en este equipo. Conecta una (o DroidCam) y reintenta; mientras, mouse/teclado/táctil funcionan.');
+    else status(`La cámara no arrancó (${e?.name || 'error'}). Revisa que ninguna otra app la esté usando; la mesa sigue con mouse/teclado.`);
+  }
 }
 $('#gCamera').onclick = enableCamera; $('#btnCam2').onclick = enableCamera;
 function applyMirror() {
@@ -880,7 +1219,12 @@ document.addEventListener('keydown', e => {
   if (k === 'g') $('#btnGestures').click();
   if (k === 'e') { if (!$('#fxEnabled').checked) { $('#fxEnabled').checked = true; $('#fxPanel').hidden = false; } fx.openPalette(); fxCycle(0); }
   if (k === 'enter' && fx.state === 'palette') { fx.prepare(fxCurrentValue()); fxRender(); }
-  if (k === 'escape') { if (fx.state === 'adjusting') fx.freeze(); else fx.closePalette(); fxRender(); }
+  if (k === 'escape') {
+    if (!$('#trackPicker').hidden) { closeTrackPicker(); return; }
+    if (lastUndoLoad && engine && !engine.decks[lastUndoLoad.deck].playing && lastUndoLoad.prev) { const { deck, prev } = lastUndoLoad; lastUndoLoad = null; loadToDeck(deck, prev, true); status('Carga deshecha: volvió la pista anterior (el deck no estaba sonando).'); return; }
+    if (fx.state === 'adjusting') fx.freeze(); else fx.closePalette(); fxRender();
+  }
+  if ((k === 'arrowdown' || k === 'arrowup') && !$('#trackPicker').hidden) { picker.start += k === 'arrowdown' ? 1 : -1; renderPicker(); }
   if (k === 'x') { fx.unprepare(); fxRender(); }
   if (k === 'c' && $('#clawEnabled').checked) setClawEnabled(false);
   if (k === 'arrowleft' || k === 'arrowright') { const c = $('#cross'); c.value = clamp(Number(c.value) + (k === 'arrowright' ? 0.08 : -0.08), -1, 1); c.dispatchEvent(new Event('input', { bubbles: true })); }
@@ -888,11 +1232,17 @@ document.addEventListener('keydown', e => {
 // ---------- Bucle principal ----------
 function loop() {
   requestAnimationFrame(loop);
+  // Medicion de FPS real del bucle (P1): media de 500 ms, visible en Diagnostico.
+  const fpsNow = performance.now();
+  loop._fpsCount = (loop._fpsCount || 0) + 1;
+  if (!loop._fpsAt) loop._fpsAt = fpsNow;
+  if (fpsNow - loop._fpsAt >= 500) { loop._fps = Math.round(loop._fpsCount * 1000 / (fpsNow - loop._fpsAt)); loop._fpsCount = 0; loop._fpsAt = fpsNow; }
+  loop._frame = (loop._frame || 0) + 1;
   if (performance.now() - (loop._fitAt || 0) > 1200) { loop._fitAt = performance.now(); fitConsole(); }
   if (engine) {
     decks.forEach((d, i) => {
       const ch = engine.decks[i];
-      if (d.track) { d.el.querySelector('.pos').textContent = fmt(ch.position()); d.el.querySelector('.rem').textContent = '-' + fmt(d.track.buffer.duration - ch.position()); drawWave(d); drawZoomWave(d); }
+      if (d.track) { d.el.querySelector('.pos').textContent = fmt(ch.position()); d.el.querySelector('.rem').textContent = '-' + fmt(d.track.buffer.duration - ch.position()); if (loop._frame % 2 === 0) drawWave(d); if (loop._frame % 3 === 0) drawZoomWave(d); if (loop._frame % 3 === 0) drawDeckSpectrum(d, i); }
       const m = document.querySelector(`.chmeter[data-meter="${i}"]`); if (m) m.style.height = `${Math.min(100, ch.level() * 100)}%`;
     });
     const ml = engine.masterLevel(), mm = $('#masterMeter'); if (mm) mm.style.width = `${Math.min(100, ml * 100)}%`;
@@ -906,7 +1256,7 @@ function loop() {
     cw.style.visibility = (cs.on || limiting) ? 'visible' : 'hidden';
     cw.textContent = limiting ? 'LIMITADOR' : 'SATURACIÓN';
     cw.classList.toggle('limiting', !!limiting);
-    refreshTransport(); syncAllKnobs(); drawSpectrum(); if (performance.now() - autoDjLastCheck > 250) { autoDjLastCheck = performance.now(); checkAutoDj(autoDjLastCheck); if (!$('#fxPanel').hidden) fxRender(); }
+    refreshTransport(); syncAllKnobs(); drawSpectrum(); if (performance.now() - autoDjLastCheck > 250) { autoDjLastCheck = performance.now(); checkAutoDj(autoDjLastCheck); checkBassWarn(); if (!gesturesOn) $('#stateDetail').textContent = `FPS del bucle: ${loop._fps || '—'} (con Diagnóstico y gestos se suma el detalle de manos)`; if (!$('#fxPanel').hidden) fxRender(); }
   }
   if (!gesturesOn || !tracker) { hands.forEach((h, i) => { const c = $(`#handCursor${i}`); if (c) c.style.display = 'none'; }); return; }
   const res = tracker.detect(); rebuildRegistry();
@@ -1039,6 +1389,6 @@ function loop() {
   });
   const ft = $('#focusTag'); ft.hidden = !focusLabel; ft.textContent = focusLabel ? `Enfocado: ${focusLabel} — haz pinza para tomarlo` : '';
   $('#chipFocus').textContent = `Foco: ${focusLabel || '—'}`;
-  $('#stateDetail').textContent = `Cámara: ${video.srcObject ? 'activa' : 'apagada'} (${mirrored ? 'espejo' : 'normal'}) · Gestos: ${gesturesOn ? 'activos' : 'pausados'} · Foco: ${focusLabel || '—'} · Garra: ${$('#clawEnabled').checked ? (clawHand >= 0 ? 'enganchada' : 'activa sin enganchar') : 'desactivada'} · Dos manos: ${two.state}`;
+  $('#stateDetail').textContent = `Cámara: ${video.srcObject ? 'activa' : 'apagada'} (${mirrored ? 'espejo' : 'normal'}) · Gestos: ${gesturesOn ? 'activos' : 'pausados'} · FPS: ${loop._fps || '—'} · Foco: ${focusLabel || '—'} · Garra: ${$('#clawEnabled').checked ? (clawHand >= 0 ? 'enganchada' : 'activa sin enganchar') : 'desactivada'} · Dos manos: ${two.state}`;
 }
 loop();

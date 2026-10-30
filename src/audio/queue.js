@@ -17,6 +17,22 @@ export function freeDeckIndex(playing) {
   if (!playing[1]) return 1;
   return -1;
 }
+// Selector PISTAS (P3.5): ventana visible y reordenamiento, logica pura.
+export function pickerWindow(total, start, pageSize = 7) {
+  const s = Math.max(0, Math.min(Math.trunc(start) || 0, Math.max(0, total - pageSize)));
+  return { start: s, end: Math.min(total, s + pageSize) };
+}
+export function moveItem(list, index, dir) {
+  const j = index + dir;
+  if (index < 0 || j < 0 || j >= list.length) return [...list];
+  const out = [...list]; [out[index], out[j]] = [out[j], out[index]];
+  return out;
+}
+// Carga segura: libre = inmediata; sonando = exige confirmacion mantenida.
+export function loadSafety({ hasTrack, playing }) {
+  if (playing) return 'confirm-hold';
+  return 'immediate';
+}
 // Deck destino para "siguiente": prefiere un deck sin pista y parado;
 // si no, el que no suena; si suenan los dos, -1 (nunca reemplazar sin mas).
 export function chooseTargetDeck(states) {

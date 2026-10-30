@@ -23,6 +23,8 @@
     <button id="btnSpectrum" class="btn" aria-pressed="true">Espectro</button>
     <button id="btnRecord" class="btn">● Grabar mezcla</button>
     <span id="clipWarn" class="clip" style="visibility:hidden">SATURACIÓN</span>
+    <span id="bassWarn" class="chip" style="visibility:hidden" title="Los dos decks tienen los graves fuertes y el crossfader está en el centro: puede sonar embarrado. Baja el LOW del que sale.">dos graves</span>
+    <button id="btnDemoGuide" class="btn">Demo guiada</button>
   </div>
 </header>
 
@@ -59,6 +61,20 @@
     <div id="fxChip" class="fx-chip" hidden></div>
     <div id="gesturePaused" class="paused-banner">Gestos pausados — la música sigue. Pulsa «Gestos» o la tecla G para reanudar.</div>
     <div id="noCam" class="nocam">Cámara apagada — puedes usar mouse, teclado y táctil.<br><button class="btn" id="btnCam2">Activar cámara</button></div>
+<div id="demoGuide" class="picker" hidden>
+  <div class="picker-head"><strong>Demo guiada (2 minutos)</strong><span class="grow"></span><button class="btn small" id="demoPrev">◀</button><button class="btn small" id="demoNext">Siguiente ▶</button><button class="btn" id="demoExit">Salir</button></div>
+  <p id="demoStep" class="msg" style="font-size:16px"></p>
+  <p class="msg">La demo no cambia el audio por ti: cada paso espera a que lo hagas tú. Salta o sal cuando quieras.</p>
+</div>
+<div id="trackPicker" class="picker" hidden>
+  <div class="picker-head"><strong id="pickerTitle">Elegir pista</strong><span id="pickerPos" class="msg"></span><span class="grow"></span>
+  <button class="btn small" id="pickerUp" title="Subir la pista elegida en el orden">▲ orden</button><button class="btn small" id="pickerDown" title="Bajar la pista elegida en el orden">▼ orden</button>
+  <button class="btn small" id="pickerPrev">◀ página</button><button class="btn small" id="pickerNext">página ▶</button>
+  <button class="btn" id="pickerClose">Volver (Esc)</button></div>
+  <div class="picker-body"><div id="pickerList" class="picker-list"></div>
+  <input id="pickerRange" type="range" min="0" max="0" step="1" value="0" data-g="range" data-orient="v" aria-label="Deslizar por la lista"></div>
+  <p class="msg" id="pickerHint">Pinza o clic sobre una pista para cargarla en el deck. Si ese deck está sonando, mantén la pinza 1 s para reemplazar.</p>
+</div>
   </div>
 </main>
 
@@ -70,6 +86,8 @@
       <div class="row">
         <label class="btn small file-btn">Importar música<input id="fileImport" type="file" accept="audio/*" multiple hidden></label>
         <button class="btn small" id="btnDemo">Cargar demos</button>
+        <button class="btn small" id="btnFolder">Elegir carpeta…</button>
+        <button class="btn small" id="btnFolderOpen">Reabrir carpeta</button>
         <input id="search" type="search" placeholder="Buscar pista…" aria-label="Buscar pista">
       </div>
       <ul id="trackList" class="track-list"></ul>
@@ -94,7 +112,9 @@
       <label>Ampliación zonas gestuales <input id="calHit" type="range" min="0" max="28" step="2" value="16"></label>
       <label>Recorrido de perilla: <span id="calKnobVal">220</span> px para todo el rango <input id="calKnob" type="range" min="120" max="420" step="20" value="220"></label>
       <label>Opacidad de la mesa <input id="calOpacity" type="range" min="0.45" max="1" step="0.05" value="0.86"></label>
-      <div class="row"><button class="btn small" id="btnLock">Bloquear mesa</button><button class="btn small" id="btnZoomMixer">Ampliar mixer</button></div>
+      <div class="row"><button class="btn small" id="btnLock">Bloquear mesa</button><button class="btn small" id="btnZoomMixer">Ampliar mixer</button><button class="btn small" id="btnReset">Restablecer todo</button></div>
+      <label>Segundos por vuelta del jog (búsqueda) <input id="calJogSec" type="range" min="0.6" max="3.6" step="0.2" value="1.8"></label>
+      <label><input type="checkbox" id="calSnap"> Imán a golpe al soltar la búsqueda con el jog</label>
       <p id="status" class="msg" role="status">Listo. Activa audio para empezar.</p>
       <p class="msg">Atajos: <kbd>Q</kbd>/<kbd>A</kbd> deck A · <kbd>P</kbd>/<kbd>L</kbd> deck B · <kbd>←</kbd><kbd>→</kbd> crossfader · <kbd>G</kbd> gestos · <kbd>C</kbd> garra</p>
     </details>
@@ -118,7 +138,7 @@
     </div>
     <div class="panel">
       <h2>Auto DJ (básico)</h2>
-      <p class="msg">Alterna A → B → A cerca del final de la pista activa, solo si el deck de destino ya tiene una pista cargada. No reemplaza la pista que suena. Sin beatmatching: el BPM es estimado y SYNC solo iguala tempo.</p>
+      <p class="msg">Alterna A → B → A cerca del final de la pista activa, solo si el deck de destino ya tiene una pista cargada. No reemplaza la pista que suena. El BPM es estimado: SYNC iguala el tempo efectivo y alinea la fase con la rejilla estimada, sin prometer beatmatching perfecto.</p>
       <label><input type="checkbox" id="autoDjEnabled"> Activar Auto DJ</label>
       <div class="row"><span class="chip" id="autoDjActive">Activo: —</span><span class="chip" id="autoDjNext">Destino: —</span></div>
       <label>Anticipación: <span id="autoDjAntVal">15</span> s antes del final
@@ -144,6 +164,14 @@
         <p id="fxStatus" class="msg">Efecto seleccionado: Filtro · Deck A. Sin efecto en el audio por ahora.</p>
       </div>
     </div>
+    <div class="panel">
+      <h2>Preescucha en auriculares (experimental)</h2>
+      <p class="msg">Escucha en unos auriculares el deck que no suena en los altavoces mientras buscas su punto de entrada. La mezcla sale por la salida predeterminada de Windows (tu óptica) y la preescucha por la que elijas aquí (tu jack); la grabación no la incluye.</p>
+      <div class="row"><button class="btn" id="btnCueDevices">Elegir auriculares…</button><select id="cueDevice" aria-label="Salida de auriculares"><option value="">Elegir en la lista…</option></select></div>
+      <label>Volumen de auriculares <input id="cueVol" type="range" min="0" max="1" step="0.01" value="0.8"></label>
+      <audio id="cueAudio" autoplay></audio>
+      <p id="cueStatus" class="msg">Preescucha: apagada. Pulsa «Elegir auriculares…» y selecciona «Altavoces (Realtek…)» (el jack); deja en Windows la óptica como salida predeterminada para la mezcla.</p>
+    </div>
     <details class="panel experimental">
       <summary>Garra de cinco dedos (experimental, en revisión)</summary>
       <p class="msg">Abre o cierra una mano para mover un parámetro sin apuntar a una perilla. Desactivada por defecto. La pinza y las dos manos tienen prioridad: con pinza la garra se suelta.</p>
@@ -168,7 +196,7 @@
     <div class="panel">
       <h2>Estado</h2>
       <p class="msg" id="stateDetail">Cámara: — · Foco: — · Garra: —</p>
-      <p class="msg">Preescucha independiente y scratch: <strong>no disponibles</strong>. SYNC solo iguala tempo, no alinea golpes. Sin tonalidad calculada.</p>
+      <p class="msg" id="stateCaps">Preescucha: experimental (panel de auriculares). Jog: búsqueda con audio atrás/adelante y empuje. SYNC: tempo efectivo + fase con la rejilla estimada. Sin tonalidad calculada.</p>
     </div>
   </div>
 </div>
