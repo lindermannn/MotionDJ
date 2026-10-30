@@ -19,10 +19,11 @@ export class Channel {
     this.mid.type = 'peaking'; this.mid.frequency.value = 1000; this.mid.Q.value = 0.8;
     this.high.type = 'highshelf'; this.high.frequency.value = 4000;
     this.filter.type = 'lowpass'; this.filter.frequency.value = 18000;
+    this.filterHp = ctx.createBiquadFilter(); this.filterHp.type = 'highpass'; this.filterHp.frequency.value = 10;
     this.analyser.fftSize = 256;
     // cadena
     this.trim.connect(this.low); this.low.connect(this.mid); this.mid.connect(this.high);
-    this.high.connect(this.filter); this.filter.connect(this.fader);
+    this.high.connect(this.filter); this.filter.connect(this.filterHp); this.filterHp.connect(this.fader);
     this.fader.connect(this.xGain); this.xGain.connect(this.analyser); this.analyser.connect(masterIn);
     this.fader.connect(this.delaySend); this.fader.connect(this.verbSend);
     this.delaySend.gain.value = 0; this.verbSend.gain.value = 0;
@@ -88,6 +89,15 @@ export class Channel {
   }
   level() { const d = new Uint8Array(this.analyser.frequencyBinCount); this.analyser.getByteTimeDomainData(d); let p = 0; for (const v of d) p = Math.max(p, Math.abs(v - 128) / 128); return p; }
 }
+// Filtro bipolar de un mando (Etapa 15): -50..+50, centro = reposo.
+// Negativo: pasa-bajos 18 kHz -> 400 Hz. Positivo: pasa-altos 10 Hz -> 4 kHz.
+export function filterFreqs(v) {
+  const x = Math.max(-50, Math.min(50, Number(v) || 0));
+  return {
+    lp: x < 0 ? 18000 * Math.pow(400 / 18000, -x / 50) : 18000,
+    hp: x > 0 ? 10 * Math.pow(4000 / 10, x / 50) : 10
+  };
+}
 // Ajustes del limitador de salida (techo ~-3 dB, ratio alto, ataque rapido).
 export const LIMITER_SETTINGS = { threshold: -3, knee: 0, ratio: 20, attack: 0.001, release: 0.25 };
 // Curva de techo suave: lineal hasta 0,6 y asintota en 0,708 (-3 dB).
@@ -121,6 +131,7 @@ export class AudioEngine {
     this.limiter.release.value = LIMITER_SETTINGS.release;
     this.ceiling = this.ctx.createWaveShaper(); this.ceiling.curve = makeCeilingCurve(); this.ceiling.oversample = '2x';
     this.masterAnalyser = this.ctx.createAnalyser(); this.masterAnalyser.fftSize = 2048; // ventana larga para picos
+    this.masterAnalyser.minDecibels = -85; this.masterAnalyser.maxDecibels = -25; this.masterAnalyser.smoothingTimeConstant = 0.82; // rango dinamico legible (Etapa 9)
     this.master.connect(this.comp); this.comp.connect(this.limiter); this.limiter.connect(this.ceiling); this.ceiling.connect(this.masterAnalyser); this.masterAnalyser.connect(this.ctx.destination);
     this.recordDest = this.ctx.createMediaStreamDestination(); this.masterAnalyser.connect(this.recordDest);
     this.decks = [new Channel(this.ctx, this.master), new Channel(this.ctx, this.master)];

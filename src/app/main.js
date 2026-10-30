@@ -1,8 +1,8 @@
-import { AudioEngine, clipState } from '../audio/engine.js';
+import { AudioEngine, clipState, filterFreqs } from '../audio/engine.js';
 import { computePeaks } from '../audio/bpm.js';
-import { analyzeBeatgrid, quantizeToBeat, beatPhase01, alignToPhase, tapTempo, beatDelayTime, syncTempoPct, ecoDelayFor } from '../audio/beatgrid.js';
+import { analyzeBeatgrid, quantizeToBeat, beatPhase01, alignToPhase, beatDelayTime, syncTempoPct, ecoDelayFor } from '../audio/beatgrid.js';
 import { createHandTracker, startCamera } from '../camera/tracker.js';
-import { PinchDetector, Smoother, ControlRegistry, pinchRatio, clamp, expandRect, mapVideoPointInBox, parseObjectPosition, visibleVideoWindow, fitFromObjectFit, knobDragValue, knobAngle, waveDragPosition, scratchRate, jogAngleDelta, handsDistance, TwoHandSession, assignHandSlots } from '../gestures/logic.js';
+import { PinchDetector, Smoother, ControlRegistry, pinchRatio, clamp, expandRect, mapVideoPointInBox, parseObjectPosition, visibleVideoWindow, fitFromObjectFit, knobDragValue, knobAngle, waveDragPosition, scratchRate, jogAngleDelta, handsDistance, TwoHandSession, assignHandSlots, zoomWindow, tempoDetent } from '../gestures/logic.js';
 import { aperture01, ClawController, clawGate } from '../gestures/claw.js';
 import { transitionValues, expressiveValues, smooth } from '../audio/transition.js';
 import { evaluateAutoDj, autoDjTriggerKey } from '../audio/autodj.js';
@@ -21,46 +21,54 @@ const decks = [
 const fmt = t => { if (!isFinite(t) || t < 0) t = 0; return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`; };
 function status(msg) { $('#status').textContent = msg; }
 
+// Pads fijos sin modos (Etapa 14): 2 HOT CUE, 2 BEAT JUMP, 2 PAD FX, 2 SAMPLER.
+const PAD_LABELS = ['CUE 1', 'CUE 2', '◀ SALTO', 'SALTO ▶', 'FX FILTRO', 'FX ECO', 'SONIDO 1', 'SONIDO 2'];
+const PAD_TITLES = ['Hot cue 1: guarda o salta (Mayús+clic o clic derecho borra)', 'Hot cue 2: guarda o salta (Mayús+clic o clic derecho borra)', 'Salta atrás 4 tiempos (a la rejilla)', 'Salta adelante 4 tiempos (a la rejilla)', 'Barrido de filtro corto', 'Eco corto', 'Sonido de sampler 1', 'Sonido de sampler 2'];
+function padLabel(p) { return PAD_LABELS[p] || `PAD ${p + 1}`; }
 function deckHTML(d, i) {
   const col = i === 0 ? 'var(--a)' : 'var(--b)';
   d.el.innerHTML = `
   <div class="deck-head"><span class="badge">${d.name}</span><h3><span class="tname">Sin pista</span></h3><span class="time bpm">BPM —</span></div>
   <canvas class="wave" width="480" height="88"></canvas>
-  <div class="row"><span class="time pos">0:00</span><span class="grow"></span><span class="time bpm">BPM —</span><span class="time rem">-0:00</span></div>
-  <div class="gridrow dj-only"><label>BPM <input class="bpm-input" type="number" min="40" max="240" step="0.1" value=""></label>
-    <button class="btn small" data-grid="half" title="Mitad de tempo">÷2</button><button class="btn small" data-grid="double" title="Doble tempo">×2</button>
-    <button class="btn small" data-grid="tap" title="Marca el ritmo 3+ veces">TAP</button><button class="btn small" data-grid="first" title="Primer golpe en la posicion actual">1er golpe aquí</button>
-    <label><input type="checkbox" class="magnetchk"> imán a golpe</label><span class="gridstate time">Sin rejilla</span></div>
-  <div class="gridrow dj-only"><label>Primer golpe <input class="first-slider" type="range" min="0" max="0.5" step="0.001" value="0"></label><label class="click-aud"><input type="checkbox" class="clickchk"> clic</label></div>
+  <canvas class="zoomwave" width="480" height="54" title="Onda ampliada: mira si las líneas gruesas caen sobre los bombos"></canvas>
+  <div class="row"><span class="time pos">0:00</span><span class="time bpm">BPM —</span><span class="grow"></span><label class="time">Zoom <select class="zoomwin" title="Segundos visibles en la onda ampliada"><option value="4">4 s</option><option value="8" selected>8 s</option><option value="16">16 s</option></select></label><span class="time rem">-0:00</span></div>
+  <div class="gridrow"><span class="gridstate time">Sin rejilla</span></div>
   <div class="deck-mid"><div class="jog" data-g="jog" title="Arrastra para scratch"><i></i></div><div class="transport">
   <div class="rowb">
-    <button class="btn cue" data-act="cue">CUE</button>
-    <button class="btn play" data-act="play">▶ PLAY</button>
-    <button class="btn" data-act="sync" title="Iguala tempo, no alinea golpes">SYNC</button>
+    <button class="btn cue" data-act="cue" title="Marca o vuelve al punto CUE">CUE</button>
+    <button class="btn play" data-act="play" title="Reproducir / pausar">▶ PLAY</button>
+    <button class="btn" data-act="sync" title="Iguala el tempo con el otro deck y alinea golpes si la rejilla es fiable">SYNC</button>
   </div>
-  <label>Tempo <span class="tempoval">+0.0%</span><input class="tempo" type="range" min="-8" max="8" step="0.1" value="0" data-g="range" data-deck="${i}" data-param="tempo"></label>
+  <label>Tempo <span class="tempoval">+0.0%</span><input class="tempo" type="range" min="-8" max="8" step="0.1" value="0" data-g="range" data-deck="${i}" data-param="tempo" title="Velocidad de la pista. Centro = 0 % (retén)"></label>
   <div class="row">
-    <button class="btn small padmode" data-mode="hotcue" title="Pinza/clic para cambiar de modo">MODO: HOT CUE</button>
-    <button class="btn small loopbtn dj-only" data-act="loop">LOOP 4</button></div></div>
+    <button class="btn small loopbtn dj-only" data-act="loop" title="Repite 4 tiempos desde el golpe más cercano">LOOP 4</button>
+    <button class="btn small ecohold" title="Mantén pulsado: eco mientras lo sostienes; al soltar se apaga solo">ECO (mantén)</button></div></div>
   </div>
-  <div class="pads">${Array.from({ length: 8 }, (_, p) => `<button class="pad" data-pad="${p}">${p + 1}<br>PAD</button>`).join('')}</div>`;
+  <div class="pads">${Array.from({ length: 8 }, (_, p) => `<button class="pad" data-pad="${p}" title="${PAD_TITLES[p]}">${PAD_LABELS[p]}</button>`).join('')}</div>`;
 }
 decks.forEach(deckHTML);
 $('#mixer').innerHTML = `
   <h3 style="text-align:center;margin:2px 0 8px">MEZCLADOR</h3>
-  ${[0, 1].map(i => `<div class="eqgrid"><div class="eqcol"><strong>CANAL ${'AB'[i]}</strong>
-    ${[['high', 'HIGH', -24, 24, 0.5, 0, 'dB', 'dj-only'], ['mid', 'MID', -24, 24, 0.5, 0, 'dB', 'dj-only'], ['low', 'LOW', -24, 24, 0.5, 0, 'dB', ''], ['trim', 'TRIM', 0, 2, 0.01, 1, '%', 'dj-only']].map(([p, l, mn, mx, st, v, unit, cls]) => knobHTML(i, p, l, mn, mx, st, v, unit, cls)).join('')}
+  <div class="mixgrid">
+    ${[0, 1].map(i => `<div class="mixcol"><strong>CANAL ${'AB'[i]}</strong>
+      ${[['high', 'HIGH', -26, 6, 0.5, 0, 'dB', 'dj-only'], ['mid', 'MID', -26, 6, 0.5, 0, 'dB', 'dj-only'], ['low', 'LOW', -26, 6, 0.5, 0, 'dB', ''], ['trim', 'TRIM', 0, 2, 0.01, 1, '%', 'dj-only']].map(([p, l, mn, mx, st, v, unit, cls]) => knobHTML(i, p, l, mn, mx, st, v, unit, cls)).join('')}
+      ${knobHTML(i, 'filter', `FILTRO ${'AB'[i]}`, -50, 50, 1, 0, '', 'dj-only knob-filter-wrap')}
+      ${knobHTML(i, 'eco', `ECO ${'AB'[i]}`, 0, 0.8, 0.01, 0, '%', 'dj-only')}
+    </div>${i === 0 ? '<div class="mixmeters"><div class="leds" title="Nivel del canal A"><i class="chmeter" data-meter="0"></i></div><div class="leds" title="Nivel del canal B"><i class="chmeter" data-meter="1"></i></div></div>' : ''}`).join('')}
   </div>
-  ${knobHTML(i, 'filter', `FILTRO ${'AB'[i]}`, -50, 50, 1, 50, '', 'dj-only knob-filter-wrap')}
-  </div>
-  <div class="meter-row"><div class="meter"><i class="chmeter"></i></div></div></div>`).join('')}
-  <div class="faderow"><div>VOL A<br><input class="vfader" type="range" min="0" max="1" step="0.01" value="0.85" data-g="range" data-orient="v" data-deck="0" data-param="vol"></div><div class="dj-only">FX DELAY<br><input type="range" min="0" max="0.8" step="0.01" value="0" data-g="range" data-param="delay" style="width:90px"><br>FX REVERB<br><input type="range" min="0" max="0.8" step="0.01" value="0" data-g="range" data-param="verb" style="width:90px"></div><div>VOL B<br><input class="vfader" type="range" min="0" max="1" step="0.01" value="0.85" data-g="range" data-orient="v" data-deck="1" data-param="vol"></div></div>
-  <div class="ecosync dj-only">ECO SYNC <select id="ecoDeck"><option value="0">Deck A</option><option value="1">Deck B</option></select>
+  <div class="faderow"><div>VOL A<br><input class="vfader" type="range" min="0" max="1" step="0.01" value="0.85" data-g="range" data-orient="v" data-deck="0" data-param="vol" title="Volumen del canal A"></div>
+  <div class="knobwrap"><button type="button" class="knob" data-g="knob" data-param="master" aria-label="Volumen master"><span class="knob-dial"><i></i></span></button><label>MASTER</label><input class="knob-state" type="range" min="0" max="1" step="0.01" value="0.85" data-g="range" data-param="master" data-display="pct" hidden></div>
+  <div>VOL B<br><input class="vfader" type="range" min="0" max="1" step="0.01" value="0.85" data-g="range" data-orient="v" data-deck="1" data-param="vol" title="Volumen del canal B"></div></div>
+  <div class="crossbox"><label style="display:block;text-align:center;font-size:11px">CROSSFADER</label>
+  <input id="cross" type="range" min="-1" max="1" step="0.01" value="0" data-g="range" data-param="cross" title="Mezcla entre el deck A y el B">
+  <div class="row"><strong style="color:var(--a)">A</strong><span class="grow"></span><strong style="color:var(--b)">B</strong></div></div>
+  <details class="avanzado dj-only"><summary>Avanzado</summary>
+    <label>FX REVERB <input type="range" min="0" max="0.8" step="0.01" value="0" data-g="range" data-param="verb" style="width:110px"></label>
+    <div class="ecosync">ECO fracciones <select id="ecoDeck"><option value="0">Deck A</option><option value="1">Deck B</option></select>
     <button class="btn small" data-eco="0.25">¼</button><button class="btn small" data-eco="0.5">½</button><button class="btn small" data-eco="1">1</button>
     <span id="ecoState" class="time">eco sin sincronizar</span></div>
-  <div class="crossbox"><label style="display:block;text-align:center;font-size:11px">CROSSFADER</label>
-  <input id="cross" type="range" min="-1" max="1" step="0.01" value="0" data-g="range" data-param="cross">
-  <div class="row"><strong style="color:var(--a)">A</strong><span class="grow"></span><strong style="color:var(--b)">B</strong></div></div>
+    <p class="msg">Las fracciones fijan el tiempo del eco compartido; la perilla ECO de cada canal usa ½ tiempo de su propio deck.</p>
+  </details>
   </div>`;
 
 // ---------- Espectro del master (barato: buffer reutilizado, ~30 fps) ----------
@@ -80,16 +88,19 @@ function drawSpectrum() {
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = 'rgba(6,17,26,.85)'; ctx.fillRect(0, 0, W, H);
   const nyq = engine.ctx.sampleRate / 2;
+  const grad = ctx.createLinearGradient(0, H, 0, 0);
+  grad.addColorStop(0, '#0e7490'); grad.addColorStop(0.55, '#22d3ee'); grad.addColorStop(0.85, '#f472b6'); grad.addColorStop(1, '#facc15');
   for (let b = 0; b < bars; b++) {
     // Eje logaritmico 40 Hz .. Nyquist
     const f0 = 40 * Math.pow(nyq / 40, b / bars), f1 = 40 * Math.pow(nyq / 40, (b + 1) / bars);
     const i0 = Math.max(1, Math.floor(f0 / nyq * spectrumBuf.length)), i1 = Math.max(i0 + 1, Math.floor(f1 / nyq * spectrumBuf.length));
     let mx = 0; for (let i = i0; i < i1 && i < spectrumBuf.length; i++) if (spectrumBuf[i] > mx) mx = spectrumBuf[i];
-    const v = mx / 255;
-    spectrumPeaks[b] = Math.max(v, spectrumPeaks[b] - 0.012); // caida de picos
+    // Compensa la inclinacion natural (los graves dominan) para leer la musica.
+    const v = Math.min(1, (mx / 255) * (0.55 + 0.75 * (b / bars)));
+    spectrumPeaks[b] = Math.max(v, spectrumPeaks[b] - 0.008); // caida de picos lenta
     const w = W / bars;
-    ctx.fillStyle = b % 2 ? '#22d3ee' : '#2dd4ee';
-    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = grad;
+    ctx.globalAlpha = 0.9;
     ctx.fillRect(b * w + 1, H - v * H, w - 2, v * H);
     ctx.globalAlpha = 1; ctx.fillStyle = '#f8fafc';
     ctx.fillRect(b * w + 1, H - spectrumPeaks[b] * H - 2, w - 2, 2);
@@ -103,8 +114,9 @@ $('#btnSpectrum').onclick = () => {
 };
 $('#btnSpectrum').setAttribute('aria-pressed', spectrumOn);
 function knobHTML(i, p, label, mn, mx, step, v, unit, cls = '') {
-  const disp = p === 'trim' ? 'pct' : '';
-  return `<div class="knobwrap ${cls}"><button type="button" class="knob${p === 'filter' ? ' knob-filter' : ''}" style="--kc:var(--${i === 1 ? 'b' : 'a'})" data-g="knob" data-deck="${i}" data-param="${p}" aria-label="${label}, Deck ${'AB'[i]}"><span class="knob-dial"><i></i></span></button><label>${label}</label><input class="knob-state" type="range" min="${mn}" max="${mx}" step="${step}" value="${v}" data-g="range" data-deck="${i}" data-param="${p}" data-unit="${unit}" data-display="${disp}" hidden></div>`;
+  const disp = (p === 'trim' || p === 'eco') ? 'pct' : '';
+  const titles = { eco: 'Repite el sonido al ritmo de la canción. Súbelo para más eco', filter: 'Gira a un lado para quitar agudos, al otro para quitar graves. Centro = normal', low: 'Graves del canal', mid: 'Medios del canal', high: 'Agudos del canal', trim: 'Volumen de entrada del canal' };
+  return `<div class="knobwrap ${cls}"><button type="button" class="knob${p === 'filter' ? ' knob-filter' : ''}" style="--kc:var(--${i === 1 ? 'b' : 'a'})" data-g="knob" data-deck="${i}" data-param="${p}" aria-label="${label}, Deck ${'AB'[i]}" title="${titles[p] || label}"><span class="knob-dial"><i></i></span></button><label>${label}</label><input class="knob-state" type="range" min="${mn}" max="${mx}" step="${step}" value="${v}" data-g="range" data-deck="${i}" data-param="${p}" data-unit="${unit}" data-display="${disp}" hidden></div>`;
 }
 function ensureEngine() {
   if (!engine) { engine = new AudioEngine(); status('Audio activado. Carga demos o importa música.'); }
@@ -131,6 +143,34 @@ function drawWave(d) {
   }
   ctx.globalAlpha = 1; ctx.fillStyle = '#fff'; ctx.fillRect(pos * cv.width, 0, 2, cv.height);
   (d.hotcues || []).forEach(h => { if (h !== null && d.track) { ctx.fillStyle = '#facc15'; ctx.fillRect(h / d.track.buffer.duration * cv.width, 0, 2, 10); } });
+}
+// Onda ampliada (Etapa 12): ventana de 4/8/16 s alrededor de la posicion,
+// con la rejilla nitida. Solo visualizacion: no corrige nada.
+function drawZoomWave(d) {
+  const cv = d.el.querySelector('.zoomwave'); if (!cv || !engine || !d.track || !d.peaksZoom) return;
+  const ctx = cv.getContext('2d'), pos = engine.decks[decks.indexOf(d)].position(), dur = d.track.buffer.duration;
+  const winSec = Number(d.el.querySelector('.zoomwin')?.value || 8);
+  const { start, end, frac } = zoomWindow(pos, dur, winSec);
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.fillStyle = d.name === 'A' ? '#22d3ee' : '#f472b6';
+  const n = d.peaksZoom.length, i0 = Math.floor(start / dur * n), i1 = Math.max(i0 + 1, Math.ceil(end / dur * n));
+  const w = cv.width / Math.max(1, i1 - i0);
+  for (let i = i0; i < i1 && i < n; i++) { const h = Math.max(2, d.peaksZoom[i] * 50); ctx.globalAlpha = start + (i - i0) / (i1 - i0) * (end - start) <= pos ? 1 : 0.4; ctx.fillRect((i - i0) * w, 27 - h / 2, Math.max(1, w - 0.5), h); }
+  ctx.globalAlpha = 1;
+  if (d.loop) { ctx.fillStyle = 'rgba(74,222,128,.18)'; ctx.fillRect((d.loop.start - start) / (end - start) * cv.width, 0, d.loop.len / (end - start) * cv.width, cv.height); }
+  if (d.grid?.bpm && d.grid.firstBeat != null) {
+    const beat = 60 / d.grid.bpm;
+    const k0 = Math.ceil((start - d.grid.firstBeat) / beat);
+    for (let k = k0; ; k++) {
+      const tt = d.grid.firstBeat + k * beat; if (tt > end) break;
+      const x = (tt - start) / (end - start) * cv.width, strong = ((k % 4) + 4) % 4 === 0;
+      ctx.fillStyle = strong ? 'rgba(255,255,255,.9)' : 'rgba(255,255,255,.35)';
+      ctx.fillRect(x, strong ? 0 : 10, strong ? 2 : 1, cv.height - (strong ? 0 : 10));
+    }
+    ctx.fillStyle = '#4ade80'; const fx = (d.grid.firstBeat - start) / (end - start) * cv.width; if (fx >= 0 && fx <= cv.width) ctx.fillRect(fx, 0, 3, cv.height);
+  }
+  (d.hotcues || []).forEach(h => { if (h !== null && h >= start && h <= end) { ctx.fillStyle = '#facc15'; ctx.fillRect((h - start) / (end - start) * cv.width, 0, 2, 10); } });
+  ctx.fillStyle = '#fff'; ctx.fillRect(frac * cv.width, 0, 2, cv.height);
 }
 // ---------- Biblioteca ----------
 function renderLibrary() {
@@ -170,62 +210,43 @@ async function loadToDeck(i, track = selectedTrack) {
   if (ch.playing) { if (!confirm(`El deck ${d.name} está sonando. ¿Detenerlo y reemplazar la pista?`)) return; }
   ch.load(track.buffer); d.track = track; d.hotcues = Array(8).fill(null);
   d.loop = null; ch.clearLoop();
-  d.el.querySelectorAll('.pad').forEach((b, p) => { b.classList.remove('set'); b.innerHTML = `${p + 1}<br>PAD`; });
+  d.el.querySelectorAll('.pad').forEach((b, p) => { b.classList.remove('set'); b.textContent = padLabel(p); });
   const lb = d.el.querySelector('.loopbtn'); if (lb) lb.textContent = 'LOOP 4';
   const tempoInp = d.el.querySelector('.tempo'); if (tempoInp) { tempoInp.value = 0; d.el.querySelector('.tempoval').textContent = '+0.0%'; }
   ch.setRate(1);
-  d.peaks = computePeaks(selectedTrack.buffer);
-  d.grid = analyzeBeatgrid(selectedTrack.buffer.getChannelData(0), selectedTrack.buffer.sampleRate);
+  d.peaks = computePeaks(track.buffer);
+  d.peaksZoom = computePeaks(track.buffer, 1440);
+  d.grid = analyzeBeatgrid(track.buffer.getChannelData(0), track.buffer.sampleRate);
   d.bpm = d.grid?.bpm || null; d.taps = [];
   d.el.querySelector('.tname').textContent = track.name;
   updateGridUI(d);
   drawWave(d); renderLibrary(); status(`Pista cargada en deck ${d.name}. No suena hasta pulsar PLAY.`);
 }
 function updateGridUI(d) {
-  const g = d.grid, beat = g?.bpm ? 60 / g.bpm : 0.5;
-  d.el.querySelectorAll('.bpm').forEach(el => { el.textContent = g?.bpm ? `BPM ${g.corrected ? '' : '~'}${g.bpm.toFixed(1)} (${g.corrected ? 'corregido' : 'estimado'})` : 'BPM —'; });
-  const inp = d.el.querySelector('.bpm-input'); if (inp && document.activeElement !== inp) inp.value = g?.bpm ? g.bpm.toFixed(1) : '';
-  const fs = d.el.querySelector('.first-slider');
-  if (fs) { fs.max = beat; if (document.activeElement !== fs) fs.value = g?.firstBeat ?? 0; }
-  const st = d.el.querySelector('.gridstate');
-  if (st) st.textContent = !g?.bpm ? 'Sin rejilla: corrige el BPM' : g.corrected ? 'Rejilla corregida por ti' : `Rejilla estimada · confianza ${g.confidence.toFixed(2)}${g.ambiguous ? ' · posible mitad/doble: usa ÷2/×2' : ''}`;
-  drawWave(d);
-  refreshEco();
-}
-function gridAction(i, act, btn) {
-  const d = decks[i]; ensureEngine(); const ch = engine.decks[i];
-  if (!d.grid) d.grid = { bpm: null, firstBeat: 0, confidence: 0, ambiguous: false };
+  // Solo lectura (Etapa 13): BPM estimado y estado de la rejilla, sin controles.
   const g = d.grid;
-  if (act === 'half' || act === 'double') {
-    if (!g.bpm) { status('Sin BPM que corregir: escribe un BPM o usa TAP.'); return; }
-    g.bpm = act === 'half' ? g.bpm / 2 : g.bpm * 2;
-    if (g.bpm < 40 || g.bpm > 250) { g.bpm = act === 'half' ? g.bpm * 2 : g.bpm / 2; status('Fuera del rango 40-250 BPM.'); return; }
-    g.corrected = true; d.bpm = g.bpm;
-    if (g.firstBeat != null) g.firstBeat = g.firstBeat % (60 / g.bpm);
-    status(`Deck ${d.name}: BPM corregido a ${g.bpm.toFixed(1)} por ${act === 'half' ? '÷2' : '×2'}.`);
-  }
-  if (act === 'tap') {
-    const now = performance.now();
-    d.taps = d.taps.filter(x => now - x < 2500); d.taps.push(now);
-    const bpm = tapTempo(d.taps);
-    btn.textContent = `TAP ${d.taps.length}`;
-    if (bpm) {
-      g.bpm = bpm; g.corrected = true; d.bpm = bpm;
-      if (ch.buffer) g.firstBeat = ((ch.position() % (60 / bpm)) + 60 / bpm) % (60 / bpm);
-      status(`Deck ${d.name}: TAP tempo ${bpm.toFixed(1)} BPM (corregido). Ajusta el primer golpe si hace falta.`);
-    } else status(`Deck ${d.name}: sigue marcando el ritmo (${d.taps.length} toques)...`);
-  }
-  if (act === 'first') {
-    if (!g.bpm || !ch.buffer) { status('Primer golpe necesita pista cargada y BPM.'); return; }
-    g.firstBeat = ((ch.position() % (60 / g.bpm)) + 60 / g.bpm) % (60 / g.bpm);
-    g.corrected = true;
-    status(`Deck ${d.name}: primer golpe en la posición actual (${fmt(ch.position())}).`);
-  }
-  updateGridUI(d);
+  d.el.querySelectorAll('.bpm').forEach(el => { el.textContent = g?.bpm ? `BPM ~${g.bpm.toFixed(1)} (estimado)` : 'BPM —'; });
+  const st = d.el.querySelector('.gridstate');
+  if (st) st.textContent = !g?.bpm ? 'Sin rejilla: este deck funciona sin SYNC de golpes ni eco al ritmo' : `Rejilla estimada · confianza ${g.confidence.toFixed(2)}${g.ambiguous ? ' · tempo dudoso entre dos octavas' : ''} · mira la onda ampliada`;
+  drawWave(d);
+  refreshEcoTimes();
 }
 $('#loadA').onclick = () => loadToDeck(0);
 $('#loadB').onclick = () => loadToDeck(1);
 // ---------- Controles de deck ----------
+// ECO por canal (Etapa 14): tiempo automatico a 1/2 del BPM efectivo del
+// deck; sin BPM, 0,28 s fijo sin avisos. El delay es compartido: manda el
+// ultimo canal con ECO movido. Las fracciones de Avanzado tienen prioridad
+// mientras esten elegidas (ecoSync).
+let lastEcoDeck = 0;
+function ecoKnobValue(i) { return Number(document.querySelector(`input.knob-state[data-param="eco"][data-deck="${i}"]`)?.value || 0); }
+function ecoTimeForDeck(i) { const d = decks[i], tempoPct = Number(d.el.querySelector('.tempo')?.value || 0); const r = ecoDelayFor(d.grid?.bpm, tempoPct, 0.5); return r ? r.sec : 0.28; }
+function refreshEcoTimes() {
+  if (!engine) return;
+  if (typeof ecoSync !== 'undefined' && ecoSync.fraction !== null) return refreshEco();
+  const i = ecoKnobValue(lastEcoDeck) > 0 ? lastEcoDeck : (ecoKnobValue(0) > 0 ? 0 : (ecoKnobValue(1) > 0 ? 1 : -1));
+  if (i >= 0) engine.setDelayTime(ecoTimeForDeck(i));
+}
 function setParam(input) {
   if (!engine) return;
   const p = input.dataset.param, i = Number(input.dataset.deck), v = Number(input.value), ch = engine?.decks[i], t = engine.ctx.currentTime;
@@ -234,15 +255,16 @@ function setParam(input) {
   if (p === 'delay') return engine.decks.forEach(d => d.delaySend.gain.setTargetAtTime(v, t, 0.05));
   if (p === 'verb') return engine.decks.forEach(d => d.verbSend.gain.setTargetAtTime(v, t, 0.05));
   if (!ch) return;
-  if (p === 'tempo') { const bpm = decks[i].bpm || 120; ch.setRate(bpm ? (1 + v / 100) : 1); decks[i].el.querySelector('.tempoval').textContent = `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`; refreshEco(); }
+  if (p === 'tempo') { const bpm = decks[i].bpm || 120; ch.setRate(bpm ? (1 + v / 100) : 1); decks[i].el.querySelector('.tempoval').textContent = `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`; refreshEcoTimes(); }
   if (p === 'vol') ch.fader.gain.setTargetAtTime(v, t, 0.03);
   if (p === 'trim') ch.trim.gain.setTargetAtTime(v, t, 0.03);
   if (p === 'low') ch.low.gain.setTargetAtTime(v, t, 0.03);
   if (p === 'mid') ch.mid.gain.setTargetAtTime(v, t, 0.03);
   if (p === 'high') ch.high.gain.setTargetAtTime(v, t, 0.03);
-  if (p === 'filter') ch.filter.frequency.setTargetAtTime(v <= 50 ? 400 + (v + 50) / 100 * 2000 : 2400 * Math.pow(18000 / 2400, (v - 50) / 50), t, 0.03);
+  if (p === 'eco') { lastEcoDeck = i; ch.delaySend.gain.setTargetAtTime(v, t, 0.05); refreshEcoTimes(); }
+  if (p === 'filter') { const f = filterFreqs(v); ch.filter.frequency.setTargetAtTime(f.lp, t, 0.03); ch.filterHp.frequency.setTargetAtTime(f.hp, t, 0.03); }
 }
-document.addEventListener('input', e => { if (e.target.matches('input[type=range][data-param]')) setParam(e.target); if (e.target.id === 'masterVol' && engine) engine.master.gain.setTargetAtTime(Number(e.target.value), engine.ctx.currentTime, 0.03); });
+document.addEventListener('input', e => { if (e.target.matches('input[type=range][data-param]')) { if (e.target.dataset.param === 'tempo') { const nv = tempoDetent(Number(e.target.value)); if (nv !== Number(e.target.value)) e.target.value = nv; } setParam(e.target); } });
 function deckAction(i, act, btn) {
   ensureEngine(); const ch = engine.decks[i], d = decks[i];
   if (!ch.buffer) { status(`Carga una pista en el deck ${d.name} primero.`); return; }
@@ -250,7 +272,7 @@ function deckAction(i, act, btn) {
   if (act === 'cue') { if (ch.playing) { ch.seek(ch.cue ?? 0); } else { ch.cue = ch.position(); ch.seek(ch.cue); status(`CUE deck ${d.name} en ${fmt(ch.cue)} (pulsa CUE sonando para volver)`); } }
   if (act === 'sync') {
     const other = decks[1 - i], otherCh = engine.decks[1 - i];
-    if (!d.bpm || !other.bpm) { status('SYNC no disponible: falta BPM en algún deck. Carga la pista o corrige la rejilla.'); return; }
+    if (!d.bpm || !other.bpm) { status('SYNC no disponible: falta BPM en algún deck. Carga la pista en ambos decks.'); return; }
     const otherTempoPct = Number(other.el.querySelector('.tempo')?.value || 0);
     const sync = syncTempoPct(d.bpm, other.bpm, otherTempoPct);
     if (!sync.ok && sync.reason === 'fuera-rango') { status(`SYNC fuera de rango (±8%): harían falta ${sync.pct.toFixed(1)}%.`); return; }
@@ -261,7 +283,7 @@ function deckAction(i, act, btn) {
       const targetPhase = beatPhase01(otherCh.position(), other.grid);
       const dest = alignToPhase(ch.position(), d.grid, targetPhase);
       ch.seek(dest);
-      status(`SYNC deck ${d.name}: tempo ${tempo.toFixed(1)}% y golpes alineados con ${other.name} (rejillas estimadas${d.grid.corrected || other.grid.corrected ? ', una corregida por ti' : ''}).`);
+      status(`SYNC deck ${d.name}: tempo ${tempo.toFixed(1)}% y golpes alineados con ${other.name} (rejillas estimadas).`);
     } else {
       status(`SYNC de TEMPO deck ${d.name}: ${tempo.toFixed(1)}% (sin alinear golpes: rejilla ${!d.grid || !other.grid ? 'ausente' : 'poco fiable'}). Revisa la rejilla y vuelve a intentarlo.`);
     }
@@ -275,23 +297,28 @@ function deckAction(i, act, btn) {
       btn.textContent = 'LOOP ON';
       status(`Loop de 4 tiempos desde el golpe (${fmt(start)}) en deck ${d.name}.`);
     }
-    else status('Loop necesita rejilla. Corrige el BPM del deck.');
+    else status('Loop necesita la rejilla estimada de la pista.');
   }
   refreshTransport();
 }
-const PAD_MODES = ['hotcue', 'sampler', 'padfx', 'beatjump', 'borrar'];
+// Pads fijos (Etapa 14): cada pad siempre hace lo mismo, sin cambiar de modo.
+// 0-1 HOT CUE · 2-3 BEAT JUMP -4/+4 · 4-5 PAD FX · 6-7 SAMPLER.
 function padAction(i, p, btn) {
-  ensureEngine(); const ch = engine.decks[i], d = decks[i], mode = d.el.querySelector('.padmode').dataset.mode;
+  ensureEngine(); const ch = engine.decks[i], d = decks[i];
   btn.classList.add('hit'); setTimeout(() => btn.classList.remove('hit'), 180);
-  if (mode === 'sampler') return engine.playSample(p);
+  if (p >= 6) return engine.playSample(p - 6 + 2);
   if (!ch.buffer) { status('Carga una pista para usar los pads.'); return; }
-  if (mode === 'hotcue') {
+  if (p <= 1) {
     if (d.hotcues[p] === null) { d.hotcues[p] = ch.position(); btn.classList.add('set'); btn.textContent = `CUE ${p + 1} ● ${fmt(d.hotcues[p])}`; drawWave(d); }
     else ch.seek(d.hotcues[p]);
   }
-  if (mode === 'borrar') deleteCue(i, p, btn);
-  if (mode === 'padfx') { const old = engine.decks[i].filter.frequency.value; ch.filter.frequency.setValueAtTime(600 + p * 300, engine.ctx.currentTime); setTimeout(() => ch.filter.frequency.setTargetAtTime(old, engine.ctx.currentTime, 0.08), 350); }
-  if (mode === 'beatjump' && d.bpm) { const beat = 60 / d.bpm; const target = ch.position() + (p < 4 ? -(4 - p) * beat : (p - 3) * beat); ch.seek(d.grid ? quantizeToBeat(target, d.grid) : target); }
+  if (p === 2 || p === 3) {
+    if (!d.bpm) { status('Saltar necesita el BPM estimado de la pista.'); return; }
+    const beat = 60 / d.bpm, target = ch.position() + (p === 2 ? -4 : 4) * beat;
+    ch.seek(d.grid ? quantizeToBeat(target, d.grid) : target);
+  }
+  if (p === 4) { const oldLp = ch.filter.frequency.value, oldHp = ch.filterHp.frequency.value, t = engine.ctx.currentTime; ch.filter.frequency.setValueAtTime(500, t); ch.filter.frequency.setTargetAtTime(oldLp, t + 0.3, 0.08); setTimeout(() => { ch.filterHp.frequency.setTargetAtTime(oldHp, engine.ctx.currentTime, 0.05); }, 400); }
+  if (p === 5) { const prev = ch.delaySend.gain.value, t = engine.ctx.currentTime; engine.setDelayTime(ecoTimeForDeck(i)); ch.delaySend.gain.setValueAtTime(0.6, t); setTimeout(() => ch.delaySend.gain.setTargetAtTime(prev, engine.ctx.currentTime, 0.08), 650); }
 }
 // ---------- Hot cues: borrar / reemplazar y cola de reproduccion ----------
 let playQueue = [];
@@ -299,9 +326,9 @@ function deleteCue(i, p, btn) {
   const d = decks[i];
   if (d.hotcues[p] === null) { status(`El pad ${p + 1} del deck ${d.name} ya está vacío.`); return; }
   d.hotcues[p] = null;
-  if (btn) { btn.classList.remove('set'); btn.innerHTML = `${p + 1}<br>PAD`; }
+  if (btn) { btn.classList.remove('set'); btn.textContent = padLabel(p); }
   drawWave(d);
-  status(`Hot cue ${p + 1} del deck ${d.name} borrado. En modo HOT CUE, un clic lo vuelve a guardar (reemplazar = borrar y guardar).`);
+  status(`Hot cue ${p + 1} del deck ${d.name} borrado. Un clic en el pad lo vuelve a guardar (reemplazar = borrar y guardar).`);
 }
 function renderQueue() {
   const ul = $('#queueList'); if (!ul) return;
@@ -326,12 +353,21 @@ function nextInQueue(manual = true) {
   return true;
 }
 $('#btnNextTrack')?.addEventListener('click', () => nextInQueue(true));
+$('#btnEasyMix')?.addEventListener('click', () => {
+  ensureEngine();
+  const playing = decks.findIndex((d, i) => engine.decks[i].playing && d.track);
+  if (playing < 0) { status('Igualar y mezclar: primero pon una pista a sonar (PLAY).'); return; }
+  const other = 1 - playing;
+  if (!decks[other].track) { status('Igualar y mezclar: carga otra pista en el deck libre (LOAD).'); return; }
+  deckAction(other, 'sync', decks[other].el.querySelector('[data-act="sync"]'));
+  if (!engine.decks[other].playing) engine.decks[other].play();
+  startAutoTransition(other === 1 ? 1 : -1, 8000);
+  status(`Igualar y mezclar: mezclando hacia el deck ${'AB'[other]} en 8 s.`);
+});
 decks.forEach((d, i) => {
   d.el.addEventListener('click', e => {
     const act = e.target.dataset?.act, pad = e.target.dataset?.pad;
-    if (e.target.classList.contains('padmode')) { const n = PAD_MODES[(PAD_MODES.indexOf(e.target.dataset.mode) + 1) % PAD_MODES.length]; e.target.dataset.mode = n; e.target.textContent = `MODO: ${n.toUpperCase()}`; return; }
     if (act) deckAction(i, act, e.target);
-    if (e.target.dataset?.grid) gridAction(i, e.target.dataset.grid, e.target);
     if (pad !== undefined) { if (e.shiftKey) deleteCue(i, Number(pad), e.target); else padAction(i, Number(pad), e.target); }
   });
   d.el.addEventListener('contextmenu', e => {
@@ -358,6 +394,12 @@ decks.forEach((d, i) => {
   });
   jog.addEventListener('pointerup', () => endScratch('mouse' + i));
   jog.addEventListener('pointercancel', () => endScratch('mouse' + i));
+  const ecoBtn = d.el.querySelector('.ecohold');
+  if (ecoBtn) {
+    const on = e => { e.preventDefault(); ensureEngine(); engine.setDelayTime(ecoTimeForDeck(i)); engine.decks[i].delaySend.gain.setTargetAtTime(0.55, engine.ctx.currentTime, 0.03); ecoBtn.classList.add('play-on'); };
+    const off = () => { if (engine) engine.decks[i].delaySend.gain.setTargetAtTime(ecoKnobValue(i), engine.ctx.currentTime, 0.09); ecoBtn.classList.remove('play-on'); };
+    ecoBtn.addEventListener('pointerdown', on); ecoBtn.addEventListener('pointerup', off); ecoBtn.addEventListener('pointerleave', off); ecoBtn.addEventListener('pointercancel', off);
+  }
   const wave = d.el.querySelector('.wave');
   wave.style.touchAction = 'none';
   wave.addEventListener('pointerdown', e => {
@@ -376,31 +418,6 @@ decks.forEach((d, i) => {
   wave.addEventListener('pointerup', endWave);
   wave.addEventListener('pointercancel', endWave);
 });
-document.addEventListener('change', e => {
-  if (e.target.classList?.contains('bpm-input')) {
-    const i = decks.findIndex(d => d.el.contains(e.target)), d = decks[i];
-    const v = Number(e.target.value);
-    if (!v || v < 40 || v > 250) { status('BPM fuera del rango 40-250.'); updateGridUI(d); return; }
-    if (!d.grid) d.grid = { bpm: null, firstBeat: 0, confidence: 0, ambiguous: false };
-    d.grid.bpm = v; d.grid.corrected = true; d.bpm = v;
-    if (d.grid.firstBeat != null) d.grid.firstBeat = d.grid.firstBeat % (60 / v);
-    status(`Deck ${d.name}: BPM corregido a mano a ${v}.`);
-    updateGridUI(d);
-  }
-});
-document.addEventListener('input', e => {
-  if (e.target.classList?.contains('first-slider')) {
-    const i = decks.findIndex(d => d.el.contains(e.target)), d = decks[i];
-    if (!d.grid?.bpm) return;
-    ensureEngine();
-    if (engine.decks[i].playing) { status('Ajusta el primer golpe con el deck en pausa.'); updateGridUI(d); return; }
-    d.grid.firstBeat = Number(e.target.value); d.grid.corrected = true;
-    const chk = d.el.querySelector('.clickchk');
-    if (chk?.checked && performance.now() - (d._clickAt || 0) > 140) { d._clickAt = performance.now(); engine.playSample(2); }
-    drawWave(d);
-    const st = d.el.querySelector('.gridstate'); if (st) st.textContent = `Primer golpe: ${d.grid.firstBeat.toFixed(3)} s (corregido)`;
-  }
-});
 function refreshTransport() {
   decks.forEach((d, i) => {
     const playing = engine?.decks[i].playing;
@@ -410,9 +427,22 @@ function refreshTransport() {
 }
 // ---------- Calibracion ----------
 const consoleEl = $('#console');
+let consoleFit = 1;
+// La consola nunca se recorta (Etapa 9): si es mas alta que el escenario,
+// se escala lo justo para caber entera, sin tocar zonas minimas en pantalla
+// movil (alli la consola fluye en columna y no necesita escala).
+function fitConsole() {
+  if (window.innerWidth <= 640) { consoleFit = 1; return; }
+  const prev = consoleEl.style.transform;
+  consoleEl.style.transform = '';
+  const h = consoleEl.offsetHeight, sh = stage.clientHeight;
+  consoleFit = h > 0 && sh > 0 ? Math.min(1, (sh * 0.95 - 8) / h) : 1; // deja el margen inferior del ancla
+  consoleEl.style.transform = prev;
+  applyCal(false);
+}
 function applyCal(save = true) {
   const s = $('#calScale').value, x = $('#calX').value, y = $('#calY').value;
-  consoleEl.style.transform = `translateX(calc(-50% + ${x}px)) scale(${s})`;
+  consoleEl.style.transform = `translateX(calc(-50% + ${x}px)) scale(${s * consoleFit})`;
   consoleEl.style.bottom = `calc(3% + ${-y}px)`;
   document.documentElement.style.setProperty('--ctl', $('#calSize').value);
   document.documentElement.style.setProperty('--alpha', $('#calOpacity')?.value || 0.86);
@@ -422,7 +452,7 @@ function applyCal(save = true) {
 try { const c = JSON.parse(localStorage.getItem('motiondj-cal') || 'null'); if (c) { $('#calScale').value = c.s; $('#calX').value = c.x; $('#calY').value = c.y; $('#calSize').value = c.size; $('#calSens').value = c.sens; if (c.knob && $('#calKnob')) $('#calKnob').value = c.knob; } } catch {}
 ['calScale', 'calX', 'calY', 'calSize', 'calSens', 'calHit', 'calOpacity', 'calKnob'].forEach(id => { const el = $('#' + id); if (el) el.addEventListener('input', () => applyCal()); });
 // ---------- Vistas Facil / DJ (mismo estado y motor; solo cambia visibilidad) ----------
-function setView(v) { requestAnimationFrame(() => { if (typeof hands !== 'undefined') hands.forEach(h => { h.smoothX.reset(); h.smoothY.reset(); }); if (typeof rebuildRegistry === 'function') rebuildRegistry(); });
+function setView(v) { requestAnimationFrame(() => { if (typeof hands !== 'undefined') hands.forEach(h => { h.smoothX.reset(); h.smoothY.reset(); }); if (typeof fitConsole === 'function') fitConsole(); if (typeof rebuildRegistry === 'function') rebuildRegistry(); });
   document.body.dataset.view = v;
   $('#btnViewEasy').setAttribute('aria-pressed', v === 'easy'); $('#btnViewDJ').setAttribute('aria-pressed', v === 'dj');
   localStorage.setItem('motiondj-view', v);
@@ -440,8 +470,8 @@ const two = new TwoHandSession({ holdMs: 700, lossMs: 300 });
 let expressiveActive = false;
 function twoBanner(txt) { const b = $('#twoHandBanner'); b.hidden = !txt; b.textContent = txt || ''; }
 function twoStatus(txt) { $('#twoStatus').textContent = txt; }
-function lowInput(i) { return document.querySelector(`[data-param=low][data-deck="${i}"]`); }
-function filterInputs() { return [0, 1].map(i => document.querySelector(`[data-param=filter][data-deck="${i}"]`)); }
+function lowInput(i) { return document.querySelector(`input.knob-state[data-param="low"][data-deck="${i}"]`); }
+function filterInputs() { return [0, 1].map(i => document.querySelector(`input.knob-state[data-param="filter"][data-deck="${i}"]`)); }
 function applyTransitionFrame(vals, target, progress01) {
   if (!engine) return;
   const cross = $('#cross'); cross.value = vals.cross; engine.setCross(vals.cross);
@@ -520,7 +550,7 @@ const fx = new FxSession();
 const FX_IDS = ['filter', 'delay'];
 function fxCurrentValue() {
   if (fx.effectId === 'delay') return engine ? engine.decks[fx.deck].delaySend.gain.value : 0;
-  return Number(document.querySelector(`[data-param="filter"][data-deck="${fx.deck}"]`)?.value || 0);
+  return Number(document.querySelector(`input.knob-state[data-param="filter"][data-deck="${fx.deck}"]`)?.value || 0);
 }
 function fxApplyValue(v, feedback) {
   ensureEngine(); if (!engine) return;
@@ -529,7 +559,7 @@ function fxApplyValue(v, feedback) {
     engine.decks[fx.deck].delaySend.gain.setTargetAtTime(v, t, 0.05);
     if (feedback !== undefined) engine.delayFb.gain.setTargetAtTime(feedback, t, 0.05);
   } else {
-    const inp = document.querySelector(`[data-param="filter"][data-deck="${fx.deck}"]`);
+    const inp = document.querySelector(`input.knob-state[data-param="filter"][data-deck="${fx.deck}"]`);
     if (inp) { inp.value = v; setParam(inp); syncAllKnobs(); }
   }
   fx.value = v;
@@ -570,7 +600,7 @@ $('#fxManual').addEventListener('input', e => {
 const claw = new ClawController({ engageMs: 500 });
 let clawHand = -1;
 const CLAW_PARAMS = { filter: { min: -50, max: 50, label: 'Filtro' }, low: { min: -24, max: 24, label: 'Graves LOW' }, delay: { min: 0, max: 0.8, label: 'Delay (envio del deck)' } };
-function clawParamInput() { return document.querySelector(`[data-param="${$('#clawParam').value}"][data-deck="${$('#clawDeck').value}"]`); }
+function clawParamInput() { return document.querySelector(`input.knob-state[data-param="${$('#clawParam').value}"][data-deck="${$('#clawDeck').value}"]`); }
 function clawCurrentValue() {
   const p = $('#clawParam').value, i = Number($('#clawDeck').value);
   if (p === 'delay') return engine ? engine.decks[i].delaySend.gain.value : 0;
@@ -630,6 +660,22 @@ function controlLabel(el) {
   if (el.classList.contains('jog')) return 'JOG (pinza y mueve = scratch)';
   return (el.textContent || el.className).trim().slice(0, 22);
 }
+// Faders con pinza (Etapa 11): arrastre RELATIVO anclado, sin salto al
+// pinzar (como la perilla). Excepcion: el crossfader conserva el modo
+// absoluto, porque en un corte rapido importa donde esta la mano, no el delta.
+const rangeDrags = new Map();
+function startRangeDrag(hand, el, x, y) {
+  if (el.dataset.param === 'cross') { setRangeFromPoint(el, x, y); return; }
+  rangeDrags.set(hand, { el, value: Number(el.value), x, y });
+}
+function moveRangeDrag(hand, el, x, y) {
+  if (el.dataset.param === 'cross') { setRangeFromPoint(el, x, y); return; }
+  const a = rangeDrags.get(hand); if (!a || a.el !== el) return;
+  const r = el.getBoundingClientRect(), span = Number(el.max) - Number(el.min);
+  const delta = el.dataset.orient === 'v' ? (a.y - y) / Math.max(40, r.height) * span : (x - a.x) / Math.max(40, r.width) * span;
+  el.value = Math.min(Number(el.max), Math.max(Number(el.min), a.value + delta));
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
 function setRangeFromPoint(el, x, y) {
   const r = el.getBoundingClientRect(), sr = stage.getBoundingClientRect();
   const frac = el.dataset.orient === 'v' ? clamp(1 - (y - (r.top - sr.top - stage.clientTop)) / r.height) : clamp((x - (r.left - sr.left - stage.clientLeft)) / r.width);
@@ -651,7 +697,7 @@ function syncAllKnobs() { document.querySelectorAll('.knob').forEach(syncKnob); 
 function showKnobBar(inp, knob, keep) {
   const bar = $('#knobBar'); bar.hidden = false;
   const v = Number(inp.value), mn = Number(inp.min), mx = Number(inp.max), f = mx > mn ? (v - mn) / (mx - mn) : 0;
-  $('#knobBarLabel').textContent = `${(inp.dataset.param || '').toUpperCase()} · DECK ${'AB'[Number(inp.dataset.deck || 0)]}`;
+  $('#knobBarLabel').textContent = inp.dataset.param === 'master' ? 'MASTER' : `${(inp.dataset.param || '').toUpperCase()} · DECK ${'AB'[Number(inp.dataset.deck || 0)]}`;
   $('#knobBarVal').textContent = inp.dataset.display === 'pct' ? `${Math.round(v * 100)}%` : (inp.dataset.unit === 'dB' ? `${v > 0 ? '+' : ''}${v} dB` : `${v}`);
   $('#knobBarFill').style.width = `${f * 100}%`;
   $('#knobBarDot').style.left = `${f * 100}%`;
@@ -716,9 +762,7 @@ $('#knobTrack').addEventListener('pointerdown', e => {
 const waveDrags = new Map();
 function waveTarget(i, fromPos, dxPx) {
   const d = decks[i];
-  let target = waveDragPosition(fromPos, dxPx, d.track.buffer.duration, knobPx());
-  if (d.el.querySelector('.magnetchk')?.checked && d.grid) target = quantizeToBeat(target, d.grid);
-  return target;
+  return waveDragPosition(fromPos, dxPx, d.track.buffer.duration, knobPx());
 }
 function applyWaveTarget(i, target) {
   const d = decks[i], ch = engine.decks[i];
@@ -817,7 +861,7 @@ function applyMirror() {
 }
 mirrored = localStorage.getItem('motiondj-mirror') !== '0'; applyMirror(); applyFrame();
 $('#btnFrame').onclick = () => { frameFit = frameFit === 'fill' ? 'contain' : 'fill'; applyFrame(); status(frameFit === 'fill' ? 'Encuadre RECORTE: llena la pantalla cortando bordes.' : 'Encuadre COMPLETO: se ve toda la camara sin recorte ni deformacion.'); };
-window.addEventListener('resize', () => { hands.forEach(h => { h.smoothX.reset(); h.smoothY.reset(); }); rebuildRegistry(); });
+window.addEventListener('resize', () => { hands.forEach(h => { h.smoothX.reset(); h.smoothY.reset(); }); fitConsole(); rebuildRegistry(); });
 $('#btnMirror').onclick = () => { mirrored = !mirrored; applyMirror(); hands.forEach(h => { h.smoothX.reset(); h.smoothY.reset(); }); status(mirrored ? 'Modo ESPEJO: te mueves como frente a un espejo.' : 'Modo NORMAL: la imagen no se invierte; el cursor sigue a tu dedo igualmente.'); };
 $('#btnGestures').onclick = e => {
   gesturesOn = !gesturesOn; e.target.textContent = gesturesOn ? 'Gestos: ACTIVOS (pausar)' : 'Gestos: PAUSADOS'; e.target.setAttribute('aria-pressed', gesturesOn);
@@ -844,11 +888,12 @@ document.addEventListener('keydown', e => {
 // ---------- Bucle principal ----------
 function loop() {
   requestAnimationFrame(loop);
+  if (performance.now() - (loop._fitAt || 0) > 1200) { loop._fitAt = performance.now(); fitConsole(); }
   if (engine) {
     decks.forEach((d, i) => {
       const ch = engine.decks[i];
-      if (d.track) { d.el.querySelector('.pos').textContent = fmt(ch.position()); d.el.querySelector('.rem').textContent = '-' + fmt(d.track.buffer.duration - ch.position()); drawWave(d); }
-      const m = d.el.querySelector('.chmeter'); if (m) m.style.width = `${Math.min(100, ch.level() * 100)}%`;
+      if (d.track) { d.el.querySelector('.pos').textContent = fmt(ch.position()); d.el.querySelector('.rem').textContent = '-' + fmt(d.track.buffer.duration - ch.position()); drawWave(d); drawZoomWave(d); }
+      const m = document.querySelector(`.chmeter[data-meter="${i}"]`); if (m) m.style.height = `${Math.min(100, ch.level() * 100)}%`;
     });
     const ml = engine.masterLevel(), mm = $('#masterMeter'); if (mm) mm.style.width = `${Math.min(100, ml * 100)}%`;
     // Saturacion con hold de 500 ms y espacio reservado: no parpadea ni
@@ -980,11 +1025,11 @@ function loop() {
     else $(`#handCursor${hi}`).querySelector('span').textContent = p.det.pinched ? 'TOMADO' : '';
     if (twoBusy || fxBusy || expressiveActive || hi === clawHand) return;
     const grabbedId = registry.grabbedBy(hi);
-    if (grabbedId) { const c = registry.controls.get(grabbedId); if (c?.el?.dataset.g === 'range') setRangeFromPoint(c.el, p.x, p.y); if (c?.el?.dataset.g === 'knob') moveKnobDrag(hi, p.x); if (c?.el?.classList.contains('wave')) moveWaveDragGesture(hi, p.x); if (c?.el?.dataset.g === 'jog') moveScratchGesture(hi, p.y); if (c) c.el.setAttribute('data-grabbed', '1'); }
+    if (grabbedId) { const c = registry.controls.get(grabbedId); if (c?.el?.dataset.g === 'range') moveRangeDrag(hi, c.el, p.x, p.y); if (c?.el?.dataset.g === 'knob') moveKnobDrag(hi, p.x); if (c?.el?.classList.contains('wave')) moveWaveDragGesture(hi, p.x); if (c?.el?.dataset.g === 'jog') moveScratchGesture(hi, p.y); if (c) c.el.setAttribute('data-grabbed', '1'); }
     if (p.det.started && !h.needRelease && hit) {
-      if (hit.el.dataset.g === 'range') { if (registry.grab(hi, hit.id)) setRangeFromPoint(hit.el, p.x, p.y); } else if (hit.el.dataset.g === 'knob') { if (registry.grab(hi, hit.id)) startKnobDrag(hit.el, p.x, hi); } else if (hit.el.dataset.g === 'jog') { if (registry.grab(hi, hit.id)) startScratch(hi, decks.findIndex(d => d.el.contains(hit.el)), p.y); } else { triggerEl(hit.el, p.x); if (hit.el.classList.contains('wave')) startWaveDrag(hi, hit.el, p.x); }
+      if (hit.el.dataset.g === 'range') { if (registry.grab(hi, hit.id)) startRangeDrag(hi, hit.el, p.x, p.y); } else if (hit.el.dataset.g === 'knob') { if (registry.grab(hi, hit.id)) startKnobDrag(hit.el, p.x, hi); } else if (hit.el.dataset.g === 'jog') { if (registry.grab(hi, hit.id)) startScratch(hi, decks.findIndex(d => d.el.contains(hit.el)), p.y); } else { triggerEl(hit.el, p.x); if (hit.el.classList.contains('wave')) startWaveDrag(hi, hit.el, p.x); }
     }
-    if (p.det.ended) { registry.release(hi); h.needRelease = false; endKnobDrag(hi); endWaveDragGesture(hi); endScratch(hi); }
+    if (p.det.ended) { registry.release(hi); h.needRelease = false; rangeDrags.delete(hi); endKnobDrag(hi); endWaveDragGesture(hi); endScratch(hi); }
     if (diag) {
       ctx.fillStyle = hi ? '#f472b6' : '#22d3ee';
       p.lm.forEach(pt0 => { const pt = coverPoint(pt0); ctx.fillRect(pt.x - 2, pt.y - 2, 4, 4); });

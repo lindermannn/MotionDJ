@@ -87,6 +87,17 @@ export function jogAngleDelta(prev, curr) {
   while (d < -Math.PI) d += 2 * Math.PI;
   return d;
 }
+// Ventana de la onda ampliada (Etapa 12): [start,end] en segundos, centrada
+// en la posicion y pegada a los bordes; frac = posicion de la posicion
+// dentro de la ventana (0..1) para dibujar el cursor.
+export function zoomWindow(pos, duration, winSec = 8) {
+  const win = Math.min(Math.max(winSec || 8, 1), Math.max(duration || 0, 1));
+  if (!(duration > 0)) return { start: 0, end: win, frac: 0 };
+  let start = Math.min(Math.max(pos - win / 2, 0), Math.max(0, duration - win));
+  return { start, end: start + win, frac: Math.min(1, Math.max(0, (pos - start) / win)) };
+}
+// Reten del tempo: cerca de 0 % el fader se queda en 0 (Etapa 11).
+export function tempoDetent(v, zone = 0.3) { return Math.abs(v) <= zone ? 0 : v; }
 // Arrastre en la onda: clic/pinza = salto al punto; mantener y mover =
 // ajuste fino relativo anclado. pxPer10s: pixeles para recorrer 10 s de
 // pista (defecto 220, igual que el recorrido de perilla).

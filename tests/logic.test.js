@@ -268,6 +268,24 @@ test('beatgrid: demos a 122/124 con error <= 0,3 BPM y sinteticos con fase +-20 
   assert.equal(amb.ambiguous, true, 'subdivision fuerte marca ambiguedad');
   assert.ok(Math.abs(amb.bpm - 100) <= 0.3 || Math.abs(amb.bpm - 200) <= 0.6, `octava avisada: ${amb.bpm}`);
 });
+test('beatgrid: criterio musical de octava para musica de baile (132 leido a 66)', async () => {
+  const { analyzeBeatgrid, musicalOctave } = await import('../src/audio/beatgrid.js');
+  assert.equal(musicalOctave(66, -0.01), 66); // sin soporte: se queda
+  assert.equal(musicalOctave(66, 0.54), 132);
+  assert.equal(musicalOctave(66, 0.78), 132);
+  assert.equal(musicalOctave(100, 0.9), 100); // >=90 no se toca
+  assert.equal(musicalOctave(44, 0.9), 44); // el doble (88) queda fuera de 90-180
+  const sr = 44100, synth = (bpm, accent) => {
+    const data = new Float32Array(sr * 12), beat = 60 / bpm;
+    const kick = (t0, amp) => { const n0 = Math.floor(t0 * sr); for (let i = 0; i < sr * 0.12 && n0 + i < data.length; i++) { const tt = i / sr; data[n0 + i] += Math.sin(2 * Math.PI * (58 - tt * 160) * tt) * Math.exp(-tt * 28) * amp; } };
+    let k = 0; for (let tt = 0.21; tt < 12; tt += beat, k++) kick(tt, accent && k % 2 ? 0.3 : 0.95);
+    return data;
+  };
+  const acc = analyzeBeatgrid(synth(132, true), sr); // acento cada 2 golpes: antes salia 66
+  assert.ok(Math.abs(acc.bpm - 132) <= 0.6, `132 con acento: ${acc.bpm}`);
+  const slow = analyzeBeatgrid(synth(66, false), sr); // 66 uniforme: no se dobla
+  assert.ok(Math.abs(slow.bpm - 66) <= 0.3, `66 uniforme: ${slow.bpm}`);
+});
 test('beatgrid: cuantizacion, alineacion de fase, TAP y tiempo de eco', async () => {
   const { quantizeToBeat, beatPhase01, alignToPhase, tapTempo, beatDelayTime } = await import('../src/audio/beatgrid.js');
   const grid = { bpm: 120, firstBeat: 0.25 }; // tiempo = 0,5 s
@@ -447,6 +465,22 @@ test('FX a dos pinzas: preparar no toca el valor, ajustar no salta y soltar cong
   f2.beginAdjust({ value: 0, y: 200, dist01: 0.3, feedback: 0.32 });
   assert.equal(f2.adjust({ y: -999, dist01: 0.9 }).value, 50); // tope, y sin segundo parametro
   assert.equal(f2.adjust({ y: -999, dist01: 0.9 }).feedback, undefined);
+});
+test('onda ampliada: ventana centrada y pegada a bordes; reten de tempo en 0', async () => {
+  const { zoomWindow, tempoDetent } = await import('../src/gestures/logic.js');
+  assert.deepEqual(zoomWindow(100, 240, 8), { start: 96, end: 104, frac: 0.5 });
+  assert.deepEqual(zoomWindow(1, 240, 8), { start: 0, end: 8, frac: 0.125 });
+  assert.deepEqual(zoomWindow(239, 240, 16), { start: 224, end: 240, frac: 0.9375 });
+  assert.deepEqual(zoomWindow(3, 5, 8), { start: 0, end: 5, frac: 0.6 }); // pista mas corta que la ventana
+  assert.equal(tempoDetent(0.29), 0); assert.equal(tempoDetent(-0.3), 0); assert.equal(tempoDetent(0.31), 0.31);
+});
+test('filtro bipolar: centro neutro, un lado pasa-bajos y el otro pasa-altos', async () => {
+  const { filterFreqs } = await import('../src/audio/engine.js');
+  assert.deepEqual(filterFreqs(0), { lp: 18000, hp: 10 });
+  const lp = filterFreqs(-50); assert.equal(Math.round(lp.lp), 400); assert.equal(lp.hp, 10);
+  const hp = filterFreqs(50); assert.equal(hp.lp, 18000); assert.equal(Math.round(hp.hp), 4000);
+  assert.ok(filterFreqs(-25).lp < 18000 && filterFreqs(-25).lp > 400);
+  assert.ok(filterFreqs(25).hp > 10 && filterFreqs(25).hp < 4000);
 });
 test('suavizado reduce saltos y fader mapea bordes', () => {
   const s = new Smoother(0.5); s.update(0);

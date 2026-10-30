@@ -82,6 +82,7 @@
         <span id="libMsg" class="msg" role="status"></span>
       </div>
       <p class="msg easy-only">Vista fácil: elige una pista, pulsa LOAD A o LOAD B y luego PLAY en ese deck. Mueve el CROSSFADER para mezclar.</p>
+      <div class="row easy-only"><button class="btn" id="btnEasyMix">Igualar y mezclar</button><span class="msg">Iguala el tempo del deck parado con el que suena y hace la mezcla suave.</span></div>
     </div>
     <details class="panel dj-only">
       <summary>Calibración y estado</summary>
@@ -112,8 +113,8 @@
       <div class="meter-row"><span>PROGRESO</span><div class="meter"><i id="twoProgress"></i></div><span id="twoProgressVal">0%</span></div>
       <div class="meter-row"><span>FILTRO/DIST.</span><div class="meter"><i id="twoFilter"></i></div><span id="twoFilterVal">—</span></div>
       <div class="row"><button class="btn" id="btnTwoConfirm" disabled>Confirmar transición</button><button class="btn" id="btnTwoCancel" disabled>Cancelar</button></div>
-      <label>Master <input id="masterVol" type="range" min="0" max="1" step="0.01" value="0.85" data-g="range" data-param="master"></label>
       <div class="meter-row"><span>MASTER</span><div class="meter"><i id="masterMeter"></i></div></div>
+      <p class="msg">El volumen general es la perilla MASTER del mezclador.</p>
     </div>
     <div class="panel">
       <h2>Auto DJ (básico)</h2>

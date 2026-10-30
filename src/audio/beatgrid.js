@@ -72,14 +72,27 @@ export function analyzeBeatgrid(channelData, sampleRate) {
   const y0 = corr[bestLag - 1] ?? best, y1 = best, y2 = corr[bestLag + 1] ?? best;
   const den = y0 - 2 * y1 + y2;
   if (den !== 0) shift = Math.max(-1, Math.min(1, 0.5 * (y0 - y2) / den));
-  const lagF = bestLag + shift;
-  const bpm = 60 * fps / lagF;
-  const confidence = Math.max(0, Math.min(1, y1));
+  let lagF = bestLag + shift;
+  let bpm = 60 * fps / lagF;
+  let confidence = Math.max(0, Math.min(1, y1));
+  // 3b) Criterio musical de octava (Etapa 13): en musica de baile un
+  // candidato <90 BPM cuyo doble cae en 90-180 y tiene soporte en la senal
+  // (autocorrelacion a mitad de periodo >= 50% de la elegida) es casi
+  // siempre el doble real con acento cada 2 golpes (medido: un sintetico a
+  // 132 con acento alterno se leia 66,0). Un 66 uniforme no tiene ese
+  // soporte a mitad de periodo y se queda en 66.
+  let octaveSupport = null;
+  const doubled = musicalOctave(bpm, lagF / 2 >= 1 ? corrAt(lagF / 2) / (y1 || 1) : 0);
+  if (doubled !== bpm) {
+    octaveSupport = corrAt(lagF / 2) / (y1 || 1);
+    lagF /= 2; bpm = doubled;
+    confidence = Math.max(0, Math.min(1, corrAt(lagF)));
+  }
   // 4) Ambiguedad de octava: subdivision fuerte a doble velocidad.
   const halfScore = lagF / 2 >= 1 ? corrAt(lagF / 2) : 0;
   // Ambigua si hay subdivision fuerte a doble velocidad o si el pico a
   // mitad de velocidad era en realidad mas fuerte que el elegido.
-  const ambiguous = y1 > 0 && (halfScore >= 0.72 * y1 || demotedSlowPeak);
+  const ambiguous = octaveSupport !== null ? octaveSupport < 0.75 : (y1 > 0 && (halfScore >= 0.72 * y1 || demotedSlowPeak));
   // 5) Fase: plegar la envolvente sobre el periodo y buscar el maximo.
   let bestPhase = 0, bestScore = -Infinity;
   const phaseScores = new Float32Array(Math.ceil(lagF) + 1);
@@ -101,6 +114,15 @@ export function analyzeBeatgrid(channelData, sampleRate) {
   const period = 60 / bpm;
   firstBeat = ((firstBeat % period) + period) % period; // fase en [0, periodo)
   return { bpm, firstBeat, confidence, ambiguous };
+}
+// Criterio musical de octava: support = autocorrelacion a mitad de periodo
+// dividida por la del periodo elegido. Solo dobla candidatos de baile.
+export function musicalOctave(bpm, support) {
+  // Umbral medido: 66 uniforme da support ~-0,01; 132 con acento alterno
+  // fuerte da ~0,54; con acento medio ~0,78.
+  if (!bpm || bpm >= 90) return bpm;
+  const d = bpm * 2;
+  return d >= 90 && d <= 180 && support >= 0.5 ? d : bpm;
 }
 export function beatPeriod(grid) { return grid?.bpm ? 60 / grid.bpm : null; }
 export function quantizeToBeat(time, grid) {
