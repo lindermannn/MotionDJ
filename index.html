@@ -20,8 +20,9 @@
     <button id="btnFrame" class="btn" aria-pressed="false" title="Completa: se ve toda la cámara sin recorte. Recorte: llena la pantalla cortando bordes.">Encuadre: COMPLETO</button>
     <button id="btnGestures" class="btn warn" aria-pressed="false">Gestos: PAUSADOS</button>
     <button id="btnDiag" class="btn" aria-pressed="false">Diagnóstico</button>
+    <button id="btnSpectrum" class="btn" aria-pressed="true">Espectro</button>
     <button id="btnRecord" class="btn">● Grabar mezcla</button>
-    <span id="clipWarn" class="clip" hidden>SATURACIÓN</span>
+    <span id="clipWarn" class="clip" style="visibility:hidden">SATURACIÓN</span>
   </div>
 </header>
 
@@ -50,11 +51,18 @@
     <div id="focusTag" class="focus-tag" hidden></div>
     <div id="knobBar" class="knob-bar" hidden><span id="knobBarLabel">LOW · DECK A</span><div class="knob-track" id="knobTrack"><i id="knobBarFill"></i><b id="knobBarDot"></b></div><span id="knobBarVal">0 dB</span></div>
     <div id="twoHandBanner" class="twohand-banner" hidden></div>
+    <div id="fxPalette" class="fx-palette" hidden>
+      <button type="button" class="fx-card" data-fx-card="filter"><strong>Filtro</strong><span>Deck elegido · mano izquierda sube/baja la cantidad</span></button>
+      <button type="button" class="fx-card" data-fx-card="delay"><strong>Eco</strong><span>Deck elegido · mano izquierda = envío · separar manos = realimentación</span></button>
+      <button type="button" class="btn small" id="fxPaletteClose">Cerrar (Esc)</button>
+    </div>
+    <div id="fxChip" class="fx-chip" hidden></div>
     <div id="gesturePaused" class="paused-banner">Gestos pausados — la música sigue. Pulsa «Gestos» o la tecla G para reanudar.</div>
     <div id="noCam" class="nocam">Cámara apagada — puedes usar mouse, teclado y táctil.<br><button class="btn" id="btnCam2">Activar cámara</button></div>
   </div>
 </main>
 
+<div class="spectrum-wrap" id="spectrumWrap"><canvas id="spectrum" width="1200" height="72"></canvas></div>
 <div class="layout">
   <div class="col">
     <div class="panel library">
@@ -65,6 +73,9 @@
         <input id="search" type="search" placeholder="Buscar pista…" aria-label="Buscar pista">
       </div>
       <ul id="trackList" class="track-list"></ul>
+    <div class="row"><button class="btn" id="btnNextTrack">Siguiente ▶ (deck libre)</button></div>
+    <p id="queueInfo" class="msg">Cola vacía: añade pistas con «+ cola». Cada deck lleva una pista; la siguiente va al otro deck mientras suena el primero.</p>
+    <ul id="queueList"></ul>
       <div class="row">
         <button class="btn load-a" id="loadA">LOAD A</button>
         <button class="btn load-b" id="loadB">LOAD B</button>
@@ -118,15 +129,17 @@
       <p class="msg">Límites: si la anticipación es menor que la duración, la mezcla puede terminar después de que acabe la pista. Pausar devuelve el control manual sin cambiar valores.</p>
     </div>
     <div class="panel">
-      <h2>Efectos — selector (prototipo, solo selección)</h2>
-      <p class="msg">Prepara el futuro control a dos manos. Seleccionar un efecto <strong>no cambia el audio</strong>; todavía no hay gesto asignado ni control con pinzas para efectos.</p>
-      <label><input type="checkbox" id="fxEnabled"> Mostrar selector de efectos</label>
+      <h2>Efectos a dos pinzas (prototipo)</h2>
+      <p class="msg">Seleccionar y preparar <strong>no cambia el audio</strong>. Con el efecto preparado, haz pinza con cada mano en el aire (sin apuntar a un control): la mano de la izquierda sube/baja la cantidad; en Eco, separar las manos sube la realimentación. Soltar o perder una mano congela el valor. Teclas: <kbd>E</kbd> paleta · <kbd>Enter</kbd> preparar · <kbd>Esc</kbd> cerrar/congelar · <kbd>X</kbd> despreparar.</p>
+      <label><input type="checkbox" id="fxEnabled"> Mostrar efectos a dos pinzas</label>
       <div id="fxPanel" hidden>
         <div class="row"><button class="btn small" id="fxPrev">◀ Anterior</button><span class="chip" id="fxName">Filtro</span><button class="btn small" id="fxNext">Siguiente ▶</button></div>
-        <div class="row"><span class="msg">Se aplicaría a:</span>
+        <div class="row"><span class="msg">Se aplica a:</span>
           <button class="btn small" id="fxDeckA" aria-pressed="true">Deck A</button>
           <button class="btn small" id="fxDeckB" aria-pressed="false">Deck B</button>
           <span class="chip" id="fxValue">Intensidad: —</span></div>
+        <div class="row"><button class="btn small" id="fxOpen">Abrir paleta</button><button class="btn small" id="fxPrepare">Preparar</button><button class="btn small" id="fxUnprepare">Despreparar (X)</button></div>
+        <label>Ajuste manual (mouse/táctil) <input id="fxManual" type="range" min="-50" max="50" step="1" value="0"></label>
         <p id="fxStatus" class="msg">Efecto seleccionado: Filtro · Deck A. Sin efecto en el audio por ahora.</p>
       </div>
     </div>

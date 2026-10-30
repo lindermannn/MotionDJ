@@ -26,11 +26,11 @@ Abre http://127.0.0.1:5173 en tu navegador.
 
 ## Qué funciona (real, no solo visual)
 
-- Dos decks independientes: play/pause, CUE principal, seek en la forma de onda, tempo ±8 % (cambia también el tono), loop de 4 pulsos, medidores y tiempos.
-- Biblioteca local con búsqueda, LOAD A/B e indicadores de deck; los archivos se procesan en el navegador y no persisten tras recargar.
-- Mixer real (Web Audio): trim, EQ de 3 bandas, filtro, volumen por canal, crossfader equal-power, master con compresor, delay y reverb por envíos.
-- 8 pads por deck con modos HOT CUE, SAMPLER (sonidos sintetizados), PAD FX y BEAT JUMP. Jog wheel solo visual (gira al reproducir; **no hay scratch**).
-- BPM estimado por autocorrelación de energía (orientativo) y SYNC que solo iguala tempo, no alinea golpes.
+- Dos decks independientes: play/pause, CUE principal, clic o arrastre fino (con imán a golpe) en la forma de onda, tempo ±8 % (cambia también el tono), loop de 4 pulsos, medidores y tiempos.
+- Biblioteca local con búsqueda, LOAD A/B, indicadores de deck y cola (+ cola / «Siguiente ▶» al deck libre); los archivos se procesan en el navegador y no persisten tras recargar.
+- Mixer real (Web Audio): trim, EQ de 3 bandas, filtro, volumen por canal, crossfader equal-power, master con compresor, limitador con aviso SATURACIÓN/LIMITADOR y curva de techo, delay y reverb por envíos. Las 10 perillas (EQ/Trim/Filtro) se arrastran con mouse, táctil o pinza con barra de valor.
+- 8 pads por deck con modos HOT CUE (borrables con Mayús+clic, clic derecho o modo borrar), SAMPLER (sonidos sintetizados), PAD FX y BEAT JUMP. Jog wheel con scratch por velocidad (sin reverse real) con ratón, táctil o pinza+mover.
+- BPM estimado por autocorrelación de energía (orientativo), SYNC que iguala tempo con el BPM efectivo y alinea la fase con la rejilla estimada, eco del mezclador sincronizable al BPM (¼/½/1) y espectro del master ocultable.
 - Transición asistida de 8 s (crossfader + graves), cancelable y con vuelta manual sin saltos.
 - Grabación de la mezcla a `.webm` mediante `MediaRecorder`.
 - Gestos: 2 manos independientes, pinza normalizada por tamaño de mano con histéresis, suavizado, liberación al perder la mano y bloqueo de gestos. La webcam no detecta contacto físico ni profundidad precisa: es estimación 2D en modo espejo.

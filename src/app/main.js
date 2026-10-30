@@ -1,11 +1,13 @@
-import { AudioEngine } from '../audio/engine.js';
-import { estimateBPM, computePeaks } from '../audio/bpm.js';
+import { AudioEngine, clipState } from '../audio/engine.js';
+import { computePeaks } from '../audio/bpm.js';
+import { analyzeBeatgrid, quantizeToBeat, beatPhase01, alignToPhase, tapTempo, beatDelayTime, syncTempoPct, ecoDelayFor } from '../audio/beatgrid.js';
 import { createHandTracker, startCamera } from '../camera/tracker.js';
-import { PinchDetector, Smoother, ControlRegistry, pinchRatio, clamp, expandRect, mapVideoPointInBox, parseObjectPosition, visibleVideoWindow, fitFromObjectFit, knobDragValue, knobAngle, handsDistance, TwoHandSession } from '../gestures/logic.js';
+import { PinchDetector, Smoother, ControlRegistry, pinchRatio, clamp, expandRect, mapVideoPointInBox, parseObjectPosition, visibleVideoWindow, fitFromObjectFit, knobDragValue, knobAngle, waveDragPosition, scratchRate, jogAngleDelta, handsDistance, TwoHandSession, assignHandSlots } from '../gestures/logic.js';
 import { aperture01, ClawController, clawGate } from '../gestures/claw.js';
 import { transitionValues, expressiveValues, smooth } from '../audio/transition.js';
 import { evaluateAutoDj, autoDjTriggerKey } from '../audio/autodj.js';
-import { createEffectSelection, cycleEffect, effectById } from '../audio/effects.js';
+import { enqueue, removeFromQueue, takeNext, chooseTargetDeck } from '../audio/queue.js';
+import { FxSession, FX_PARAMS, fxCanAdjust } from '../audio/fx-twohand.js';
 
 const $ = s => document.querySelector(s);
 const stage = $('#stage'), video = $('#cam'), overlay = $('#overlay');
@@ -13,8 +15,8 @@ let engine = null, tracker = null, gesturesOn = false, diag = false;
 let selectedTrack = null, smartTimer = null, recorder = null, recChunks = [];
 const library = [];
 const decks = [
-  { el: $('#deckA'), name: 'A', track: null, bpm: null, peaks: null, hotcues: Array(8).fill(null), mode: 'hotcue', loop: null },
-  { el: $('#deckB'), name: 'B', track: null, bpm: null, peaks: null, hotcues: Array(8).fill(null), mode: 'hotcue', loop: null }
+  { el: $('#deckA'), name: 'A', track: null, bpm: null, grid: null, taps: [], peaks: null, hotcues: Array(8).fill(null), mode: 'hotcue', loop: null },
+  { el: $('#deckB'), name: 'B', track: null, bpm: null, grid: null, taps: [], peaks: null, hotcues: Array(8).fill(null), mode: 'hotcue', loop: null }
 ];
 const fmt = t => { if (!isFinite(t) || t < 0) t = 0; return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`; };
 function status(msg) { $('#status').textContent = msg; }
@@ -25,7 +27,12 @@ function deckHTML(d, i) {
   <div class="deck-head"><span class="badge">${d.name}</span><h3><span class="tname">Sin pista</span></h3><span class="time bpm">BPM —</span></div>
   <canvas class="wave" width="480" height="88"></canvas>
   <div class="row"><span class="time pos">0:00</span><span class="grow"></span><span class="time bpm">BPM —</span><span class="time rem">-0:00</span></div>
-  <div class="deck-mid"><div class="jog"><i></i></div><div class="transport">
+  <div class="gridrow dj-only"><label>BPM <input class="bpm-input" type="number" min="40" max="240" step="0.1" value=""></label>
+    <button class="btn small" data-grid="half" title="Mitad de tempo">÷2</button><button class="btn small" data-grid="double" title="Doble tempo">×2</button>
+    <button class="btn small" data-grid="tap" title="Marca el ritmo 3+ veces">TAP</button><button class="btn small" data-grid="first" title="Primer golpe en la posicion actual">1er golpe aquí</button>
+    <label><input type="checkbox" class="magnetchk"> imán a golpe</label><span class="gridstate time">Sin rejilla</span></div>
+  <div class="gridrow dj-only"><label>Primer golpe <input class="first-slider" type="range" min="0" max="0.5" step="0.001" value="0"></label><label class="click-aud"><input type="checkbox" class="clickchk"> clic</label></div>
+  <div class="deck-mid"><div class="jog" data-g="jog" title="Arrastra para scratch"><i></i></div><div class="transport">
   <div class="rowb">
     <button class="btn cue" data-act="cue">CUE</button>
     <button class="btn play" data-act="play">▶ PLAY</button>
@@ -42,20 +49,63 @@ decks.forEach(deckHTML);
 $('#mixer').innerHTML = `
   <h3 style="text-align:center;margin:2px 0 8px">MEZCLADOR</h3>
   ${[0, 1].map(i => `<div class="eqgrid"><div class="eqcol"><strong>CANAL ${'AB'[i]}</strong>
-    ${[['high', 'HIGH', -24, 24, 0, 'dj-only'], ['mid', 'MID', -24, 24, 0, 'dj-only'], ['low', 'LOW', -24, 24, 0, ''], ['trim', 'TRIM', 0, 2, 1, 'dj-only']].map(([p, l, mn, mx, v, cls]) =>
-      (i === 0 && p === 'low'
-        ? `<div class="knobwrap"><button type="button" class="knob" data-g="knob" data-deck="0" data-param="low" aria-label="LOW, Deck A"><span class="knob-dial"><i></i></span></button><label>LOW</label><input class="knob-state" type="range" min="-24" max="24" step="0.5" value="0" data-g="range" data-deck="0" data-param="low" hidden></div>`
-        : `<div class="${cls}"><label>${l}</label><input type="range" min="${mn}" max="${mx}" step="0.5" value="${v}" data-g="range" data-deck="${i}" data-param="${p}"></div>`)).join('')}
+    ${[['high', 'HIGH', -24, 24, 0.5, 0, 'dB', 'dj-only'], ['mid', 'MID', -24, 24, 0.5, 0, 'dB', 'dj-only'], ['low', 'LOW', -24, 24, 0.5, 0, 'dB', ''], ['trim', 'TRIM', 0, 2, 0.01, 1, '%', 'dj-only']].map(([p, l, mn, mx, st, v, unit, cls]) => knobHTML(i, p, l, mn, mx, st, v, unit, cls)).join('')}
   </div>
-  <label>FILTRO ${i === 0 ? 'A' : 'B'} <input type="range" min="-50" max="50" step="1" value="50" data-g="range" data-deck="${i}" data-param="filter"></label>
+  ${knobHTML(i, 'filter', `FILTRO ${'AB'[i]}`, -50, 50, 1, 50, '', 'dj-only knob-filter-wrap')}
   </div>
   <div class="meter-row"><div class="meter"><i class="chmeter"></i></div></div></div>`).join('')}
   <div class="faderow"><div>VOL A<br><input class="vfader" type="range" min="0" max="1" step="0.01" value="0.85" data-g="range" data-orient="v" data-deck="0" data-param="vol"></div><div class="dj-only">FX DELAY<br><input type="range" min="0" max="0.8" step="0.01" value="0" data-g="range" data-param="delay" style="width:90px"><br>FX REVERB<br><input type="range" min="0" max="0.8" step="0.01" value="0" data-g="range" data-param="verb" style="width:90px"></div><div>VOL B<br><input class="vfader" type="range" min="0" max="1" step="0.01" value="0.85" data-g="range" data-orient="v" data-deck="1" data-param="vol"></div></div>
+  <div class="ecosync dj-only">ECO SYNC <select id="ecoDeck"><option value="0">Deck A</option><option value="1">Deck B</option></select>
+    <button class="btn small" data-eco="0.25">¼</button><button class="btn small" data-eco="0.5">½</button><button class="btn small" data-eco="1">1</button>
+    <span id="ecoState" class="time">eco sin sincronizar</span></div>
   <div class="crossbox"><label style="display:block;text-align:center;font-size:11px">CROSSFADER</label>
   <input id="cross" type="range" min="-1" max="1" step="0.01" value="0" data-g="range" data-param="cross">
   <div class="row"><strong style="color:var(--a)">A</strong><span class="grow"></span><strong style="color:var(--b)">B</strong></div></div>
   </div>`;
 
+// ---------- Espectro del master (barato: buffer reutilizado, ~30 fps) ----------
+let spectrumOn = localStorage.getItem('motiondj-spectrum') !== '0', spectrumBuf = null, spectrumFrame = 0;
+const spectrumPeaks = new Float32Array(64);
+function drawSpectrum() {
+  const wrap = $('#spectrumWrap');
+  if (!wrap) return;
+  const show = spectrumOn && document.body.dataset.view !== 'easy';
+  wrap.style.display = show ? '' : 'none';
+  if (!show || !engine) return;
+  if ((spectrumFrame++ & 1) === 1) return; // ~mitad de fotogramas
+  const an = engine.masterAnalyser, cv = $('#spectrum'), ctx = cv.getContext('2d');
+  if (!spectrumBuf || spectrumBuf.length !== an.frequencyBinCount) spectrumBuf = new Uint8Array(an.frequencyBinCount);
+  an.getByteFrequencyData(spectrumBuf);
+  const W = cv.width, H = cv.height, bars = spectrumPeaks.length;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(6,17,26,.85)'; ctx.fillRect(0, 0, W, H);
+  const nyq = engine.ctx.sampleRate / 2;
+  for (let b = 0; b < bars; b++) {
+    // Eje logaritmico 40 Hz .. Nyquist
+    const f0 = 40 * Math.pow(nyq / 40, b / bars), f1 = 40 * Math.pow(nyq / 40, (b + 1) / bars);
+    const i0 = Math.max(1, Math.floor(f0 / nyq * spectrumBuf.length)), i1 = Math.max(i0 + 1, Math.floor(f1 / nyq * spectrumBuf.length));
+    let mx = 0; for (let i = i0; i < i1 && i < spectrumBuf.length; i++) if (spectrumBuf[i] > mx) mx = spectrumBuf[i];
+    const v = mx / 255;
+    spectrumPeaks[b] = Math.max(v, spectrumPeaks[b] - 0.012); // caida de picos
+    const w = W / bars;
+    ctx.fillStyle = b % 2 ? '#22d3ee' : '#2dd4ee';
+    ctx.globalAlpha = 0.85;
+    ctx.fillRect(b * w + 1, H - v * H, w - 2, v * H);
+    ctx.globalAlpha = 1; ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(b * w + 1, H - spectrumPeaks[b] * H - 2, w - 2, 2);
+  }
+}
+$('#btnSpectrum').onclick = () => {
+  spectrumOn = !spectrumOn;
+  localStorage.setItem('motiondj-spectrum', spectrumOn ? '1' : '0');
+  $('#btnSpectrum').setAttribute('aria-pressed', spectrumOn);
+  spectrumPeaks.fill(0);
+};
+$('#btnSpectrum').setAttribute('aria-pressed', spectrumOn);
+function knobHTML(i, p, label, mn, mx, step, v, unit, cls = '') {
+  const disp = p === 'trim' ? 'pct' : '';
+  return `<div class="knobwrap ${cls}"><button type="button" class="knob${p === 'filter' ? ' knob-filter' : ''}" style="--kc:var(--${i === 1 ? 'b' : 'a'})" data-g="knob" data-deck="${i}" data-param="${p}" aria-label="${label}, Deck ${'AB'[i]}"><span class="knob-dial"><i></i></span></button><label>${label}</label><input class="knob-state" type="range" min="${mn}" max="${mx}" step="${step}" value="${v}" data-g="range" data-deck="${i}" data-param="${p}" data-unit="${unit}" data-display="${disp}" hidden></div>`;
+}
 function ensureEngine() {
   if (!engine) { engine = new AudioEngine(); status('Audio activado. Carga demos o importa música.'); }
   if (engine.ctx.state === 'suspended') engine.ctx.resume();
@@ -69,6 +119,16 @@ function drawWave(d) {
   const pos = engine && d.track ? engine.decks[decks.indexOf(d)].position() / d.track.buffer.duration : 0;
   const n = d.peaks.length, w = cv.width / n;
   for (let i = 0; i < n; i++) { const h = Math.max(2, d.peaks[i] * 80); ctx.globalAlpha = i / n <= pos ? 1 : 0.35; ctx.fillRect(i * w, 44 - h / 2, Math.max(1, w - 1), h); }
+  if (d.grid?.bpm && d.grid.firstBeat != null && d.track) {
+    const beat = 60 / d.grid.bpm, dur = d.track.buffer.duration;
+    let idx = 0;
+    for (let tt = d.grid.firstBeat; tt < dur; tt += beat, idx++) {
+      const x = tt / dur * cv.width, strong = idx % 4 === 0;
+      ctx.fillStyle = strong ? 'rgba(255,255,255,.75)' : 'rgba(255,255,255,.28)';
+      ctx.fillRect(x, strong ? 0 : 14, strong ? 2 : 1, cv.height - (strong ? 0 : 14));
+    }
+    ctx.fillStyle = '#4ade80'; ctx.fillRect(d.grid.firstBeat / dur * cv.width, 0, 3, cv.height); // primer golpe
+  }
   ctx.globalAlpha = 1; ctx.fillStyle = '#fff'; ctx.fillRect(pos * cv.width, 0, 2, cv.height);
   (d.hotcues || []).forEach(h => { if (h !== null && d.track) { ctx.fillStyle = '#facc15'; ctx.fillRect(h / d.track.buffer.duration * cv.width, 0, 2, 10); } });
 }
@@ -78,8 +138,10 @@ function renderLibrary() {
   library.filter(t => t.name.toLowerCase().includes(q)).forEach(t => {
     const li = document.createElement('li');
     if (selectedTrack === t) li.className = 'sel';
-    li.innerHTML = `<span>${t.name}</span><span>${decks.map((d, i) => d.track === t ? `<span class="tagdeck">DECK ${'AB'[i]}</span>` : '').join('')}</span>`;
+    li.innerHTML = `<span>${t.name}</span><span>${decks.map((d, i) => d.track === t ? `<span class="tagdeck">DECK ${'AB'[i]}</span>` : '').join('')} <button class="btn small" data-qadd title="Añadir a la cola">+ cola</button> <button class="btn small" data-qdel title="Quitar de la biblioteca">✕</button></span>`;
     li.onclick = () => { selectedTrack = t; renderLibrary(); };
+    li.querySelector('[data-qadd]').onclick = (e) => { e.stopPropagation(); playQueue = enqueue(playQueue, t); renderQueue(); $('#libMsg').textContent = `En cola: ${t.name}`; };
+    li.querySelector('[data-qdel]').onclick = (e) => { e.stopPropagation(); const ix = library.indexOf(t); if (ix >= 0) library.splice(ix, 1); playQueue = playQueue.filter(x => x !== t); if (selectedTrack === t) selectedTrack = null; renderLibrary(); renderQueue(); $('#libMsg').textContent = `Quitada de la biblioteca: ${t.name} (si sonaba en un deck, sigue hasta que cargues otra).`; };
     ul.appendChild(li);
   });
 }
@@ -102,15 +164,64 @@ $('#btnDemo').onclick = async () => {
   await addTrack('Demo A — House 122 BPM (generada)', '/audio/demo-a.wav');
   await addTrack('Demo B — Electro 124 BPM (generada)', '/audio/demo-b.wav');
 };
-async function loadToDeck(i) {
-  if (!selectedTrack) { $('#libMsg').textContent = 'Selecciona primero una pista de la lista.'; return; }
+async function loadToDeck(i, track = selectedTrack) {
+  if (!track) { $('#libMsg').textContent = 'Selecciona primero una pista de la lista.'; return; }
   ensureEngine(); const ch = engine.decks[i], d = decks[i];
   if (ch.playing) { if (!confirm(`El deck ${d.name} está sonando. ¿Detenerlo y reemplazar la pista?`)) return; }
-  ch.load(selectedTrack.buffer); d.track = selectedTrack; d.hotcues = Array(8).fill(null);
-  d.peaks = computePeaks(selectedTrack.buffer); d.bpm = estimateBPM(selectedTrack.buffer);
-  d.el.querySelector('.tname').textContent = selectedTrack.name;
-  d.el.querySelector('.bpm').textContent = d.bpm ? `BPM ~${d.bpm} (estimado)` : 'BPM —';
+  ch.load(track.buffer); d.track = track; d.hotcues = Array(8).fill(null);
+  d.loop = null; ch.clearLoop();
+  d.el.querySelectorAll('.pad').forEach((b, p) => { b.classList.remove('set'); b.innerHTML = `${p + 1}<br>PAD`; });
+  const lb = d.el.querySelector('.loopbtn'); if (lb) lb.textContent = 'LOOP 4';
+  const tempoInp = d.el.querySelector('.tempo'); if (tempoInp) { tempoInp.value = 0; d.el.querySelector('.tempoval').textContent = '+0.0%'; }
+  ch.setRate(1);
+  d.peaks = computePeaks(selectedTrack.buffer);
+  d.grid = analyzeBeatgrid(selectedTrack.buffer.getChannelData(0), selectedTrack.buffer.sampleRate);
+  d.bpm = d.grid?.bpm || null; d.taps = [];
+  d.el.querySelector('.tname').textContent = track.name;
+  updateGridUI(d);
   drawWave(d); renderLibrary(); status(`Pista cargada en deck ${d.name}. No suena hasta pulsar PLAY.`);
+}
+function updateGridUI(d) {
+  const g = d.grid, beat = g?.bpm ? 60 / g.bpm : 0.5;
+  d.el.querySelectorAll('.bpm').forEach(el => { el.textContent = g?.bpm ? `BPM ${g.corrected ? '' : '~'}${g.bpm.toFixed(1)} (${g.corrected ? 'corregido' : 'estimado'})` : 'BPM —'; });
+  const inp = d.el.querySelector('.bpm-input'); if (inp && document.activeElement !== inp) inp.value = g?.bpm ? g.bpm.toFixed(1) : '';
+  const fs = d.el.querySelector('.first-slider');
+  if (fs) { fs.max = beat; if (document.activeElement !== fs) fs.value = g?.firstBeat ?? 0; }
+  const st = d.el.querySelector('.gridstate');
+  if (st) st.textContent = !g?.bpm ? 'Sin rejilla: corrige el BPM' : g.corrected ? 'Rejilla corregida por ti' : `Rejilla estimada · confianza ${g.confidence.toFixed(2)}${g.ambiguous ? ' · posible mitad/doble: usa ÷2/×2' : ''}`;
+  drawWave(d);
+  refreshEco();
+}
+function gridAction(i, act, btn) {
+  const d = decks[i]; ensureEngine(); const ch = engine.decks[i];
+  if (!d.grid) d.grid = { bpm: null, firstBeat: 0, confidence: 0, ambiguous: false };
+  const g = d.grid;
+  if (act === 'half' || act === 'double') {
+    if (!g.bpm) { status('Sin BPM que corregir: escribe un BPM o usa TAP.'); return; }
+    g.bpm = act === 'half' ? g.bpm / 2 : g.bpm * 2;
+    if (g.bpm < 40 || g.bpm > 250) { g.bpm = act === 'half' ? g.bpm * 2 : g.bpm / 2; status('Fuera del rango 40-250 BPM.'); return; }
+    g.corrected = true; d.bpm = g.bpm;
+    if (g.firstBeat != null) g.firstBeat = g.firstBeat % (60 / g.bpm);
+    status(`Deck ${d.name}: BPM corregido a ${g.bpm.toFixed(1)} por ${act === 'half' ? '÷2' : '×2'}.`);
+  }
+  if (act === 'tap') {
+    const now = performance.now();
+    d.taps = d.taps.filter(x => now - x < 2500); d.taps.push(now);
+    const bpm = tapTempo(d.taps);
+    btn.textContent = `TAP ${d.taps.length}`;
+    if (bpm) {
+      g.bpm = bpm; g.corrected = true; d.bpm = bpm;
+      if (ch.buffer) g.firstBeat = ((ch.position() % (60 / bpm)) + 60 / bpm) % (60 / bpm);
+      status(`Deck ${d.name}: TAP tempo ${bpm.toFixed(1)} BPM (corregido). Ajusta el primer golpe si hace falta.`);
+    } else status(`Deck ${d.name}: sigue marcando el ritmo (${d.taps.length} toques)...`);
+  }
+  if (act === 'first') {
+    if (!g.bpm || !ch.buffer) { status('Primer golpe necesita pista cargada y BPM.'); return; }
+    g.firstBeat = ((ch.position() % (60 / g.bpm)) + 60 / g.bpm) % (60 / g.bpm);
+    g.corrected = true;
+    status(`Deck ${d.name}: primer golpe en la posición actual (${fmt(ch.position())}).`);
+  }
+  updateGridUI(d);
 }
 $('#loadA').onclick = () => loadToDeck(0);
 $('#loadB').onclick = () => loadToDeck(1);
@@ -123,7 +234,7 @@ function setParam(input) {
   if (p === 'delay') return engine.decks.forEach(d => d.delaySend.gain.setTargetAtTime(v, t, 0.05));
   if (p === 'verb') return engine.decks.forEach(d => d.verbSend.gain.setTargetAtTime(v, t, 0.05));
   if (!ch) return;
-  if (p === 'tempo') { const bpm = decks[i].bpm || 120; ch.setRate(bpm ? (1 + v / 100) : 1); decks[i].el.querySelector('.tempoval').textContent = `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`; }
+  if (p === 'tempo') { const bpm = decks[i].bpm || 120; ch.setRate(bpm ? (1 + v / 100) : 1); decks[i].el.querySelector('.tempoval').textContent = `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`; refreshEco(); }
   if (p === 'vol') ch.fader.gain.setTargetAtTime(v, t, 0.03);
   if (p === 'trim') ch.trim.gain.setTargetAtTime(v, t, 0.03);
   if (p === 'low') ch.low.gain.setTargetAtTime(v, t, 0.03);
@@ -138,44 +249,157 @@ function deckAction(i, act, btn) {
   if (act === 'play') { ch.playing ? ch.pause() : ch.play(); }
   if (act === 'cue') { if (ch.playing) { ch.seek(ch.cue ?? 0); } else { ch.cue = ch.position(); ch.seek(ch.cue); status(`CUE deck ${d.name} en ${fmt(ch.cue)} (pulsa CUE sonando para volver)`); } }
   if (act === 'sync') {
-    const other = decks[1 - i];
-    if (!d.bpm || !other.bpm) { status('Sync tempo no disponible: falta BPM estimado en algún deck.'); return; }
-    const tempo = (other.bpm / d.bpm - 1) * 100;
-    if (Math.abs(tempo) > 8) { status(`Sync fuera de rango (±8%): harían falta ${tempo.toFixed(1)}%.`); return; }
+    const other = decks[1 - i], otherCh = engine.decks[1 - i];
+    if (!d.bpm || !other.bpm) { status('SYNC no disponible: falta BPM en algún deck. Carga la pista o corrige la rejilla.'); return; }
+    const otherTempoPct = Number(other.el.querySelector('.tempo')?.value || 0);
+    const sync = syncTempoPct(d.bpm, other.bpm, otherTempoPct);
+    if (!sync.ok && sync.reason === 'fuera-rango') { status(`SYNC fuera de rango (±8%): harían falta ${sync.pct.toFixed(1)}%.`); return; }
+    const tempo = sync.pct;
     const inp = d.el.querySelector('.tempo'); inp.value = tempo.toFixed(1); setParam(inp);
-    status(`Sync de TEMPO deck ${d.name}: ${tempo.toFixed(1)}% (no alinea golpes). Tono cambia con la velocidad.`);
+    const CONF = 0.3;
+    if (d.grid && other.grid && d.grid.confidence >= CONF && other.grid.confidence >= CONF && otherCh.playing) {
+      const targetPhase = beatPhase01(otherCh.position(), other.grid);
+      const dest = alignToPhase(ch.position(), d.grid, targetPhase);
+      ch.seek(dest);
+      status(`SYNC deck ${d.name}: tempo ${tempo.toFixed(1)}% y golpes alineados con ${other.name} (rejillas estimadas${d.grid.corrected || other.grid.corrected ? ', una corregida por ti' : ''}).`);
+    } else {
+      status(`SYNC de TEMPO deck ${d.name}: ${tempo.toFixed(1)}% (sin alinear golpes: rejilla ${!d.grid || !other.grid ? 'ausente' : 'poco fiable'}). Revisa la rejilla y vuelve a intentarlo.`);
+    }
   }
   if (act === 'loop') {
-    if (d.loop) { d.loop = null; btn.textContent = 'LOOP 4'; }
-    else if (d.bpm) { const beat = 60 / d.bpm; d.loop = { start: ch.position(), len: beat * 4 }; btn.textContent = 'LOOP ON'; }
-    else status('Loop necesita BPM estimado.');
+    if (d.loop) { d.loop = null; ch.clearLoop(); btn.textContent = 'LOOP 4'; }
+    else if (d.grid?.bpm) {
+      const beat = 60 / d.grid.bpm, start = quantizeToBeat(ch.position(), d.grid);
+      d.loop = { start, len: beat * 4 };
+      ch.setLoop(start, start + beat * 4); // loop programado en el motor, sin seek
+      btn.textContent = 'LOOP ON';
+      status(`Loop de 4 tiempos desde el golpe (${fmt(start)}) en deck ${d.name}.`);
+    }
+    else status('Loop necesita rejilla. Corrige el BPM del deck.');
   }
   refreshTransport();
 }
-const PAD_MODES = ['hotcue', 'sampler', 'padfx', 'beatjump'];
+const PAD_MODES = ['hotcue', 'sampler', 'padfx', 'beatjump', 'borrar'];
 function padAction(i, p, btn) {
   ensureEngine(); const ch = engine.decks[i], d = decks[i], mode = d.el.querySelector('.padmode').dataset.mode;
   btn.classList.add('hit'); setTimeout(() => btn.classList.remove('hit'), 180);
   if (mode === 'sampler') return engine.playSample(p);
   if (!ch.buffer) { status('Carga una pista para usar los pads.'); return; }
   if (mode === 'hotcue') {
-    if (d.hotcues[p] === null) { d.hotcues[p] = ch.position(); btn.classList.add('set'); btn.textContent = `CUE ${p + 1} ●`; }
+    if (d.hotcues[p] === null) { d.hotcues[p] = ch.position(); btn.classList.add('set'); btn.textContent = `CUE ${p + 1} ● ${fmt(d.hotcues[p])}`; drawWave(d); }
     else ch.seek(d.hotcues[p]);
   }
+  if (mode === 'borrar') deleteCue(i, p, btn);
   if (mode === 'padfx') { const old = engine.decks[i].filter.frequency.value; ch.filter.frequency.setValueAtTime(600 + p * 300, engine.ctx.currentTime); setTimeout(() => ch.filter.frequency.setTargetAtTime(old, engine.ctx.currentTime, 0.08), 350); }
-  if (mode === 'beatjump' && d.bpm) { const beat = 60 / d.bpm; ch.seek(ch.position() + (p < 4 ? -(4 - p) * beat : (p - 3) * beat)); }
+  if (mode === 'beatjump' && d.bpm) { const beat = 60 / d.bpm; const target = ch.position() + (p < 4 ? -(4 - p) * beat : (p - 3) * beat); ch.seek(d.grid ? quantizeToBeat(target, d.grid) : target); }
 }
+// ---------- Hot cues: borrar / reemplazar y cola de reproduccion ----------
+let playQueue = [];
+function deleteCue(i, p, btn) {
+  const d = decks[i];
+  if (d.hotcues[p] === null) { status(`El pad ${p + 1} del deck ${d.name} ya está vacío.`); return; }
+  d.hotcues[p] = null;
+  if (btn) { btn.classList.remove('set'); btn.innerHTML = `${p + 1}<br>PAD`; }
+  drawWave(d);
+  status(`Hot cue ${p + 1} del deck ${d.name} borrado. En modo HOT CUE, un clic lo vuelve a guardar (reemplazar = borrar y guardar).`);
+}
+function renderQueue() {
+  const ul = $('#queueList'); if (!ul) return;
+  ul.innerHTML = '';
+  playQueue.forEach((t, ix) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${ix + 1}. ${t.name}</span><button class="btn small">✕</button>`;
+    li.querySelector('button').onclick = () => { playQueue = removeFromQueue(playQueue, ix); renderQueue(); };
+    ul.appendChild(li);
+  });
+  $('#queueInfo').textContent = playQueue.length ? `Cola: ${playQueue.length} pista(s). «Siguiente» la carga en el deck que no suena.` : 'Cola vacía: añade pistas con «+ cola». Cada deck lleva una pista; la siguiente va al otro deck mientras suena el primero.';
+}
+function nextInQueue(manual = true) {
+  ensureEngine();
+  const target = chooseTargetDeck(decks.map((d, i) => ({ hasTrack: !!d.track, playing: !!engine.decks[i].playing })));
+  if (target < 0) { if (manual) status('Suenan los dos decks: «Siguiente» no reemplaza ninguno sin tu confirmación.'); return false; }
+  const taken = takeNext(playQueue);
+  if (!taken.track) { if (manual) status('La cola está vacía. Añade pistas con «+ cola».'); return false; }
+  playQueue = taken.queue; renderQueue();
+  loadToDeck(target, taken.track);
+  status(`Siguiente: «${taken.track.name}» cargada en el deck ${decks[target].name} (no suena hasta PLAY o Auto DJ).`);
+  return true;
+}
+$('#btnNextTrack')?.addEventListener('click', () => nextInQueue(true));
 decks.forEach((d, i) => {
   d.el.addEventListener('click', e => {
     const act = e.target.dataset?.act, pad = e.target.dataset?.pad;
     if (e.target.classList.contains('padmode')) { const n = PAD_MODES[(PAD_MODES.indexOf(e.target.dataset.mode) + 1) % PAD_MODES.length]; e.target.dataset.mode = n; e.target.textContent = `MODO: ${n.toUpperCase()}`; return; }
     if (act) deckAction(i, act, e.target);
-    if (pad !== undefined) padAction(i, Number(pad), e.target);
+    if (e.target.dataset?.grid) gridAction(i, e.target.dataset.grid, e.target);
+    if (pad !== undefined) { if (e.shiftKey) deleteCue(i, Number(pad), e.target); else padAction(i, Number(pad), e.target); }
   });
-  d.el.querySelector('.wave').addEventListener('click', e => {
-    if (!engine || !d.track) return; const r = e.target.getBoundingClientRect();
-    engine.decks[i].seek((e.clientX - r.left) / r.width * d.track.buffer.duration);
+  d.el.addEventListener('contextmenu', e => {
+    if (e.target.classList.contains('pad')) { e.preventDefault(); deleteCue(i, Number(e.target.dataset.pad), e.target); }
   });
+  const jog = d.el.querySelector('.jog');
+  jog.style.touchAction = 'none';
+  jog.addEventListener('pointerdown', e => {
+    if (!engine || !d.track) return;
+    ensureEngine();
+    const r = jog.getBoundingClientRect();
+    startScratch('mouse' + i, i, e.clientY);
+    const s = scratches.get('mouse' + i);
+    if (s) { s.cx = r.left + r.width / 2; s.cy = r.top + r.height / 2; s.lastA = Math.atan2(e.clientY - s.cy, e.clientX - s.cx); }
+    try { jog.setPointerCapture(e.pointerId); } catch {}
+  });
+  jog.addEventListener('pointermove', e => {
+    const s = scratches.get('mouse' + i); if (!s) return;
+    const now = performance.now(), dt = Math.max(1, now - s.lastT) / 1000;
+    const a = Math.atan2(e.clientY - s.cy, e.clientX - s.cx);
+    const rev = jogAngleDelta(s.lastA, a) / (2 * Math.PI) / dt;
+    s.lastA = a; s.lastT = now;
+    applyScratchRev('mouse' + i, rev);
+  });
+  jog.addEventListener('pointerup', () => endScratch('mouse' + i));
+  jog.addEventListener('pointercancel', () => endScratch('mouse' + i));
+  const wave = d.el.querySelector('.wave');
+  wave.style.touchAction = 'none';
+  wave.addEventListener('pointerdown', e => {
+    if (!engine || !d.track) return;
+    ensureEngine(); const ch = engine.decks[i], r = wave.getBoundingClientRect();
+    const jump = (e.clientX - r.left) / r.width * d.track.buffer.duration;
+    ch.seek(jump); // clic corto: salto al punto (como siempre)
+    d._waveDrag = { x: e.clientX, pos: ch.position(), last: 0 };
+    try { wave.setPointerCapture(e.pointerId); } catch {}
+  });
+  wave.addEventListener('pointermove', e => {
+    if (!d._waveDrag || !engine || !d.track) return;
+    moveWaveDrag(i, e.clientX, performance.now());
+  });
+  const endWave = () => { if (d._waveDrag && engine && d.track) moveWaveDrag(i, null, performance.now(), true); d._waveDrag = null; };
+  wave.addEventListener('pointerup', endWave);
+  wave.addEventListener('pointercancel', endWave);
+});
+document.addEventListener('change', e => {
+  if (e.target.classList?.contains('bpm-input')) {
+    const i = decks.findIndex(d => d.el.contains(e.target)), d = decks[i];
+    const v = Number(e.target.value);
+    if (!v || v < 40 || v > 250) { status('BPM fuera del rango 40-250.'); updateGridUI(d); return; }
+    if (!d.grid) d.grid = { bpm: null, firstBeat: 0, confidence: 0, ambiguous: false };
+    d.grid.bpm = v; d.grid.corrected = true; d.bpm = v;
+    if (d.grid.firstBeat != null) d.grid.firstBeat = d.grid.firstBeat % (60 / v);
+    status(`Deck ${d.name}: BPM corregido a mano a ${v}.`);
+    updateGridUI(d);
+  }
+});
+document.addEventListener('input', e => {
+  if (e.target.classList?.contains('first-slider')) {
+    const i = decks.findIndex(d => d.el.contains(e.target)), d = decks[i];
+    if (!d.grid?.bpm) return;
+    ensureEngine();
+    if (engine.decks[i].playing) { status('Ajusta el primer golpe con el deck en pausa.'); updateGridUI(d); return; }
+    d.grid.firstBeat = Number(e.target.value); d.grid.corrected = true;
+    const chk = d.el.querySelector('.clickchk');
+    if (chk?.checked && performance.now() - (d._clickAt || 0) > 140) { d._clickAt = performance.now(); engine.playSample(2); }
+    drawWave(d);
+    const st = d.el.querySelector('.gridstate'); if (st) st.textContent = `Primer golpe: ${d.grid.firstBeat.toFixed(3)} s (corregido)`;
+  }
 });
 function refreshTransport() {
   decks.forEach((d, i) => {
@@ -244,7 +468,10 @@ function startAutoTransition(targetOverride, durOverride) {
 function autoDjPlanNow() { return evaluateAutoDj({ enabled: $('#autoDjEnabled').checked, cross: Number($('#cross').value || 0), anticipationSec: Number($('#autoDjAnt').value || 15), decks: decks.map((d, i) => ({ hasTrack: !!d.track, playing: !!engine?.decks[i].playing, position: engine && d.track ? engine.decks[i].position() : 0, duration: d.track ? d.track.buffer.duration : null })) }); }
 function autoDjRender(plan) { $('#autoDjActive').textContent = `Activo: ${plan.active === null ? '—' : 'Deck ' + 'AB'[plan.active]}`; $('#autoDjNext').textContent = `Destino: ${plan.next === null ? '—' : 'Deck ' + 'AB'[plan.next] + (plan.ready ? ' (pista lista)' : ' (sin pista)')}`; $('#autoDjStatus').textContent = plan.reason; $('#btnAutoDjNow').disabled = !(plan.ready && plan.active !== null && !smartTimer && !autoDjTimerBusy); $('#btnAutoDjCancel').disabled = !($('#autoDjEnabled').checked || smartTimer); $('#autoDjAntVal').textContent = $('#autoDjAnt').value; }
 function startAutoDjTransition(plan, why) { if (!plan.ready || plan.active === null || smartTimer) return false; ensureEngine(); const next = plan.next; $('#twoTarget').value = String(next === 1 ? 1 : -1); if (!engine.decks[next].playing) engine.decks[next].play(); refreshTransport(); autoDjTimerBusy = true; startAutoTransition(next === 1 ? 1 : -1, Number($('#autoDjDuration').value)); $('#autoDjStatus').textContent = `${why}: pasando de ${'AB'[plan.active]} a ${'AB'[next]} en ${Number($('#autoDjDuration').value) / 1000} s. Cancela para retomar el control.`; return true; }
-function checkAutoDj(now) { const plan = autoDjPlanNow(); autoDjRender(plan); if (!plan.shouldTransition || smartTimer || autoDjTimerBusy) return; const key = autoDjTriggerKey(plan, decks.map(d => d.track?.id)); if (key === autoDjLastKey) return; autoDjLastKey = key; startAutoDjTransition(plan, 'Auto DJ'); }
+function checkAutoDj(now) {
+  const plan0 = autoDjPlanNow();
+  if ($('#autoDjEnabled').checked && plan0.active !== null && plan0.next !== null && !decks[plan0.next].track && playQueue.length) nextInQueue(false);
+  const plan = autoDjPlanNow(); autoDjRender(plan); if (!plan.shouldTransition || smartTimer || autoDjTimerBusy) return; const key = autoDjTriggerKey(plan, decks.map(d => d.track?.id)); if (key === autoDjLastKey) return; autoDjLastKey = key; startAutoDjTransition(plan, 'Auto DJ'); }
 function cancelAutoDj(msg) { $('#autoDjEnabled').checked = false; autoDjLastKey = null; if (autoDjTimerBusy) { cancelAuto(false); autoDjTimerBusy = false; } twoBanner(''); autoDjRender(autoDjPlanNow()); $('#autoDjStatus').textContent = msg || 'Auto DJ pausado. Control manual activo; los valores quedan donde estan, sin saltos.'; }
 function cancelAuto(restoreMsg = true) {
   if (smartTimer) clearInterval(smartTimer); smartTimer = null;
@@ -260,6 +487,27 @@ function freezeExpressive(reason) {
   if (!expressiveActive) return; expressiveActive = false;
   twoBanner(''); twoStatus(`${reason} Valores congelados sin saltos; control manual activo.`);
 }
+// Eco sincronizado: recuerda deck + fraccion y sigue al BPM EFECTIVO de ese
+// deck (nominal x tempo aplicado, como el SYNC de la Etapa 1).
+const ecoSync = { deck: 0, fraction: null };
+function refreshEco(announce = false) {
+  if (ecoSync.fraction === null || !engine) return;
+  const i = ecoSync.deck, d = decks[i];
+  const tempoPct = Number(d.el.querySelector('.tempo')?.value || 0);
+  const r = ecoDelayFor(d.grid?.bpm, tempoPct, ecoSync.fraction);
+  const fracTxt = { '0.25': '¼', '0.5': '½', '1': '1' }[String(ecoSync.fraction)];
+  if (!r) { $('#ecoState').textContent = 'eco sin sincronizar'; if (announce) status(`Eco sin sincronizar: el deck ${'AB'[i]} no tiene BPM. El tiempo no cambió.`); return; }
+  engine.setDelayTime(r.sec);
+  $('#ecoState').textContent = `Eco ${fracTxt} de tiempo · ${r.sec.toFixed(3)} s (deck ${'AB'[i]}, BPM efectivo ${r.effectiveBpm.toFixed(1)})`;
+  if (announce) status(`Eco sincronizado a ${fracTxt} de tiempo del deck ${'AB'[i]}: ${r.sec.toFixed(3)} s. Sube FX DELAY del mezclador para oírlo.`);
+}
+$('#mixer').addEventListener('click', e => {
+  const f = e.target.dataset?.eco; if (!f) return;
+  ensureEngine();
+  ecoSync.deck = Number($('#ecoDeck').value); ecoSync.fraction = Number(f);
+  refreshEco(true);
+});
+$('#ecoDeck')?.addEventListener('change', () => { ecoSync.deck = Number($('#ecoDeck').value); refreshEco(); });
 $('#btnTwoConfirm').onclick = () => { $('#btnTwoConfirm').disabled = true; confirmTwoHand(); };
 $('#btnTwoCancel').onclick = () => { cancelAuto(); autoDjTimerBusy = false; freezeExpressive('Cancelado por el usuario.'); two.reset(); $('#btnTwoConfirm').disabled = true; };
 $('#twoEnabled').onchange = e => { if (!e.target.checked) { two.reset(); freezeExpressive('Dos manos desactivado.'); cancelAuto(false); twoBanner(''); } twoStatus(e.target.checked ? 'Activado. Mantén pinza con AMBAS manos 1 s para preparar (no se activa bailando ni con una mano).' : 'Desactivado.'); };
@@ -267,13 +515,56 @@ $('#autoDjEnabled').onchange = () => { autoDjLastKey = null; const p = autoDjPla
 $('#autoDjAnt').oninput = () => { $('#autoDjAntVal').textContent = $('#autoDjAnt').value; };
 $('#btnAutoDjNow').onclick = () => { if (!$('#autoDjEnabled').checked) { $('#autoDjStatus').textContent = 'Activa Auto DJ primero; la transicion a pedido no arranca sola.'; return; } const p = autoDjPlanNow(); if (startAutoDjTransition(p, 'Transicion a pedido')) autoDjLastKey = autoDjTriggerKey(p, decks.map(d => d.track?.id)); else autoDjRender(p); };
 $('#btnAutoDjCancel').onclick = () => cancelAutoDj();
-let fxSelection = createEffectSelection();
-function fxRender() { const fx = effectById(fxSelection.effectId); $('#fxName').textContent = fx.label; $('#fxDeckA').setAttribute('aria-pressed', fxSelection.deck === 0); $('#fxDeckB').setAttribute('aria-pressed', fxSelection.deck === 1); let val = '—'; if (fx.id === 'delay') val = engine ? Math.round(engine.decks[fxSelection.deck].delaySend.gain.value / 0.8 * 100) + '%' : '0%'; else { const inp = document.querySelector(`[data-param="${fx.targetParam}"][data-deck="${fxSelection.deck}"]`); val = inp ? inp.value + fx.unit : '—'; } $('#fxValue').textContent = `Intensidad actual: ${val}`; $('#fxStatus').textContent = `Efecto seleccionado: ${fx.label} · Deck ${'AB'[fxSelection.deck]}. Sin efecto en el audio por ahora (solo seleccion).`; }
-$('#fxEnabled').onchange = e => { $('#fxPanel').hidden = !e.target.checked; if (e.target.checked) fxRender(); };
-$('#fxPrev').onclick = () => { fxSelection = cycleEffect(fxSelection, -1); fxRender(); };
-$('#fxNext').onclick = () => { fxSelection = cycleEffect(fxSelection, 1); fxRender(); };
-$('#fxDeckA').onclick = () => { fxSelection = { ...fxSelection, deck: 0 }; fxRender(); };
-$('#fxDeckB').onclick = () => { fxSelection = { ...fxSelection, deck: 1 }; fxRender(); };
+// ---------- Efectos a dos pinzas (prototipo Filtro/Eco) ----------
+const fx = new FxSession();
+const FX_IDS = ['filter', 'delay'];
+function fxCurrentValue() {
+  if (fx.effectId === 'delay') return engine ? engine.decks[fx.deck].delaySend.gain.value : 0;
+  return Number(document.querySelector(`[data-param="filter"][data-deck="${fx.deck}"]`)?.value || 0);
+}
+function fxApplyValue(v, feedback) {
+  ensureEngine(); if (!engine) return;
+  const t = engine.ctx.currentTime;
+  if (fx.effectId === 'delay') {
+    engine.decks[fx.deck].delaySend.gain.setTargetAtTime(v, t, 0.05);
+    if (feedback !== undefined) engine.delayFb.gain.setTargetAtTime(feedback, t, 0.05);
+  } else {
+    const inp = document.querySelector(`[data-param="filter"][data-deck="${fx.deck}"]`);
+    if (inp) { inp.value = v; setParam(inp); syncAllKnobs(); }
+  }
+  fx.value = v;
+}
+function fxRender() {
+  const p = FX_PARAMS[fx.effectId], deckTxt = 'AB'[fx.deck];
+  $('#fxName').textContent = p.label;
+  $('#fxDeckA').setAttribute('aria-pressed', fx.deck === 0); $('#fxDeckB').setAttribute('aria-pressed', fx.deck === 1);
+  const valTxt = fx.effectId === 'delay' ? `${Math.round(fxCurrentValue() / 0.8 * 100)}%` : `${Math.round(fxCurrentValue())}`;
+  $('#fxValue').textContent = `Intensidad actual: ${valTxt}`;
+  const man = $('#fxManual'); man.min = p.min; man.max = p.max; man.step = fx.effectId === 'delay' ? 0.01 : 1;
+  if (document.activeElement !== man) man.value = fxCurrentValue();
+  document.querySelectorAll('[data-fx-card]').forEach(c => c.classList.toggle('active', c.dataset.fxCard === fx.effectId));
+  $('#fxPalette').hidden = fx.state !== 'palette';
+  const chip = $('#fxChip');
+  chip.hidden = !(fx.state === 'prepared' || fx.state === 'frozen' || fx.state === 'adjusting');
+  chip.textContent = fx.state === 'adjusting' ? `AJUSTANDO ${p.label.toUpperCase()} · DECK ${deckTxt}: ${valTxt} — suelta para congelar` : `FX PREPARADO: ${p.label.toUpperCase()} · ${deckTxt} — pinza con cada mano para ajustar`;
+  const stateTxt = { idle: 'sin preparar', palette: 'paleta abierta (el audio no cambia)', prepared: 'preparado', adjusting: 'ajustando con dos pinzas', frozen: 'congelado (valor conservado)' }[fx.state];
+  $('#fxStatus').textContent = `Efecto: ${p.label} · Deck ${deckTxt} · ${stateTxt}. Seleccionar/preparar no cambia el audio.`;
+}
+function fxCycle(step) { const i = FX_IDS.indexOf(fx.effectId); fx.select(FX_IDS[(i + step + FX_IDS.length) % FX_IDS.length], fx.deck); fxRender(); }
+$('#fxEnabled').onchange = e => { $('#fxPanel').hidden = !e.target.checked; if (e.target.checked) fxRender(); else { fx.freeze(); fx.closePalette(); fxRender(); } };
+$('#fxPrev').onclick = () => fxCycle(-1);
+$('#fxNext').onclick = () => fxCycle(1);
+$('#fxDeckA').onclick = () => { fx.select(fx.effectId, 0); fxRender(); };
+$('#fxDeckB').onclick = () => { fx.select(fx.effectId, 1); fxRender(); };
+$('#fxOpen').onclick = () => { fx.openPalette(); fxRender(); };
+$('#fxPaletteClose').onclick = () => { fx.closePalette(); fxRender(); };
+document.querySelectorAll('[data-fx-card]').forEach(c => c.onclick = () => { fx.select(c.dataset.fxCard, fx.deck); fxRender(); });
+$('#fxPrepare').onclick = () => { fx.prepare(fxCurrentValue()); fxRender(); status(`FX preparado: ${FX_PARAMS[fx.effectId].label} · Deck ${'AB'[fx.deck]}. El audio aún no cambia.`); };
+$('#fxUnprepare').onclick = () => { fx.unprepare(); fxRender(); };
+$('#fxManual').addEventListener('input', e => {
+  if (fx.state === 'idle' || fx.state === 'palette') fx.prepare(fxCurrentValue());
+  fxApplyValue(Number(e.target.value)); fxRender();
+});
 // Compatibilidad: la antigua smartTo queda sustituida por startAutoTransition.
 // ---------- Garra de cinco dedos (experimental, desactivada por defecto) ----------
 const claw = new ClawController({ engageMs: 500 });
@@ -310,13 +601,13 @@ $('#btnRecord').onclick = e => {
 };
 // ---------- Camara y gestos ----------
 const registry = new ControlRegistry();
-const hands = [0, 1].map(() => ({ pinch: new PinchDetector(), smoothX: new Smoother(0.45), smoothY: new Smoother(0.45), seen: 0, el: null, needRelease: true }));
+const hands = [0, 1].map(() => ({ pinch: new PinchDetector(), smoothX: new Smoother(0.45), smoothY: new Smoother(0.45), seen: 0, el: null, needRelease: true, wrist: null, missingSince: null }));
 let mirrored = true;
 function rebuildRegistry() {
   registry.controls.clear();
   const pad = Number($('#calHit')?.value || 16), sr = stage.getBoundingClientRect();
   // TODOS los controles de la mesa: sliders, botones (PLAY/CUE/SYNC/LOOP/pads/modo) y onda.
-  document.querySelectorAll('.console [data-g], .console button, .console .wave').forEach((el, idx) => {
+  document.querySelectorAll('.console [data-g], .console button, .console .wave, #fxPalette [data-fx-card]').forEach((el, idx) => {
     const r = el.getBoundingClientRect();
     if (!r.width) return;
     if (!el._gid) el._gid = `ctl-${idx}-${el.dataset.param || el.dataset.act || el.className}`;
@@ -335,7 +626,8 @@ function coverPoint(lm) { const box = videoBox(); const cs = getComputedStyle(vi
 function controlLabel(el) {
   if (!el) return '—';
   if (el.dataset.param) return `${el.dataset.param.toUpperCase()} ${el.dataset.deck !== undefined ? 'AB'[el.dataset.deck] : ''}`.trim();
-  if (el.classList.contains('wave')) return 'ONDA (pinza = seek)';
+  if (el.classList.contains('wave')) return 'ONDA (pinza = salto, mantén y mueve = ajuste fino)';
+  if (el.classList.contains('jog')) return 'JOG (pinza y mueve = scratch)';
   return (el.textContent || el.className).trim().slice(0, 22);
 }
 function setRangeFromPoint(el, x, y) {
@@ -345,7 +637,7 @@ function setRangeFromPoint(el, x, y) {
   el.dispatchEvent(new Event('input', { bubbles: true }));
 }
 // ---------- Perilla piloto (LOW deck A): arrastre relativo anclado ----------
-let knobDrag = null, knobBarTimer = null;
+const knobDrags = new Map(); let knobBarTimer = null;
 function knobInput(knob) { return knob?.closest('.knobwrap')?.querySelector('.knob-state') || null; }
 function knobPx() { return Number($('#calKnob')?.value || 220); }
 function syncKnob(knob) {
@@ -353,14 +645,14 @@ function syncKnob(knob) {
   const v = Number(inp.value), mn = Number(inp.min), mx = Number(inp.max), f = mx > mn ? (v - mn) / (mx - mn) : 0;
   knob.style.setProperty('--ang', knobAngle(v, mn, mx) + 'deg');
   knob.style.setProperty('--frac', f);
-  if (knobDrag?.knob === knob) showKnobBar(inp, knob, true);
+  if ([...knobDrags.values()].some(d => d.knob === knob)) showKnobBar(inp, knob, true);
 }
 function syncAllKnobs() { document.querySelectorAll('.knob').forEach(syncKnob); }
 function showKnobBar(inp, knob, keep) {
   const bar = $('#knobBar'); bar.hidden = false;
   const v = Number(inp.value), mn = Number(inp.min), mx = Number(inp.max), f = mx > mn ? (v - mn) / (mx - mn) : 0;
   $('#knobBarLabel').textContent = `${(inp.dataset.param || '').toUpperCase()} · DECK ${'AB'[Number(inp.dataset.deck || 0)]}`;
-  $('#knobBarVal').textContent = `${v > 0 ? '+' : ''}${v} dB`;
+  $('#knobBarVal').textContent = inp.dataset.display === 'pct' ? `${Math.round(v * 100)}%` : (inp.dataset.unit === 'dB' ? `${v > 0 ? '+' : ''}${v} dB` : `${v}`);
   $('#knobBarFill').style.width = `${f * 100}%`;
   $('#knobBarDot').style.left = `${f * 100}%`;
   bar.style.borderColor = Number(inp.dataset.deck) === 1 ? 'var(--b)' : 'var(--a)';
@@ -368,28 +660,33 @@ function showKnobBar(inp, knob, keep) {
 }
 function hideKnobBarSoon() {
   if (knobBarTimer) clearTimeout(knobBarTimer);
-  knobBarTimer = setTimeout(() => { if (!knobDrag) $('#knobBar').hidden = true; knobBarTimer = null; }, 700);
+  knobBarTimer = setTimeout(() => { if (!knobDrags.size) $('#knobBar').hidden = true; knobBarTimer = null; }, 700);
 }
 function startKnobDrag(knob, x, hand) {
   const inp = knobInput(knob); if (!inp) return false;
-  knobDrag = { knob, input: inp, hand, startValue: Number(inp.value), startX: x };
+  knobDrags.set(hand, { knob, input: inp, hand, startValue: Number(inp.value), startX: x });
   showKnobBar(inp, knob);
   return true;
 }
-function moveKnobDrag(x) {
-  if (!knobDrag) return;
-  const inp = knobDrag.input;
-  inp.value = knobDragValue(knobDrag.startValue, x - knobDrag.startX, Number(inp.min), Number(inp.max), knobPx());
+function moveKnobDrag(hand, x) {
+  const drag = knobDrags.get(hand); if (!drag) return;
+  const inp = drag.input;
+  inp.value = knobDragValue(drag.startValue, x - drag.startX, Number(inp.min), Number(inp.max), knobPx());
   inp.dispatchEvent(new Event('input', { bubbles: true }));
-  syncKnob(knobDrag.knob);
+  syncKnob(drag.knob);
 }
-function endKnobDrag() { if (!knobDrag) return; knobDrag = null; hideKnobBarSoon(); }
+function endKnobDrag(hand) {
+  if (hand !== undefined) knobDrags.delete(hand); else knobDrags.clear();
+  if (!knobDrags.size) hideKnobBarSoon();
+  else { const last = [...knobDrags.values()].at(-1); if (last) showKnobBar(last.input, last.knob, true); }
+}
+function endAllKnobs() { endKnobDrag(); }
 document.querySelectorAll('.knob').forEach(knob => {
   const inp = knobInput(knob);
-  knob.addEventListener('pointerdown', e => { e.preventDefault(); knob.focus(); knob.setPointerCapture(e.pointerId); startKnobDrag(knob, e.clientX, 'mouse'); });
-  knob.addEventListener('pointermove', e => { if (knobDrag?.knob === knob && knobDrag.hand === 'mouse') moveKnobDrag(e.clientX); });
-  knob.addEventListener('pointerup', () => endKnobDrag());
-  knob.addEventListener('pointercancel', () => endKnobDrag());
+  knob.addEventListener('pointerdown', e => { e.preventDefault(); knob.focus(); try { knob.setPointerCapture(e.pointerId); } catch {} startKnobDrag(knob, e.clientX, 'mouse'); });
+  knob.addEventListener('pointermove', e => { if (knobDrags.get('mouse')?.knob === knob) moveKnobDrag('mouse', e.clientX); });
+  knob.addEventListener('pointerup', () => endKnobDrag('mouse'));
+  knob.addEventListener('pointercancel', () => endKnobDrag('mouse'));
   knob.addEventListener('focus', () => { if (inp) showKnobBar(inp, knob); });
   knob.addEventListener('blur', () => hideKnobBarSoon());
   knob.addEventListener('keydown', e => {
@@ -406,11 +703,95 @@ document.querySelectorAll('.knob').forEach(knob => {
   });
 });
 $('#knobTrack').addEventListener('pointerdown', e => {
-  const knob = document.querySelector('.knob'); const inp = knob && knobInput(knob); if (!inp) return;
+  const drag = [...knobDrags.values()].at(-1);
+  const knob = drag?.knob || document.querySelector('.knob:focus') || document.querySelector('.knob'); const inp = knob && knobInput(knob); if (!inp) return;
   const r = e.currentTarget.getBoundingClientRect(), f = clamp((e.clientX - r.left) / r.width);
   inp.value = Number(inp.min) + f * (Number(inp.max) - Number(inp.min));
   inp.dispatchEvent(new Event('input', { bubbles: true })); syncKnob(knob);
 });
+// ---------- Arrastre en la onda: salto + ajuste fino anclado ----------
+// Decision de audio: seek limitado a ~11/s mientras se arrastra (throttle)
+// y seek exacto al soltar; si el deck sonaba sigue sonando, si estaba en
+// pausa queda en pausa. Salir del loop activo con el arrastre lo desactiva.
+const waveDrags = new Map();
+function waveTarget(i, fromPos, dxPx) {
+  const d = decks[i];
+  let target = waveDragPosition(fromPos, dxPx, d.track.buffer.duration, knobPx());
+  if (d.el.querySelector('.magnetchk')?.checked && d.grid) target = quantizeToBeat(target, d.grid);
+  return target;
+}
+function applyWaveTarget(i, target) {
+  const d = decks[i], ch = engine.decks[i];
+  if (d.loop && (target < d.loop.start || target > d.loop.start + d.loop.len)) {
+    d.loop = null; ch.clearLoop();
+    const b = d.el.querySelector('.loopbtn'); if (b) b.textContent = 'LOOP 4';
+    status(`Deck ${d.name}: saliste del loop arrastrando; loop desactivado.`);
+  }
+  ch.seek(target);
+}
+function moveWaveDrag(i, clientX, now, force = false) {
+  const d = decks[i], drag = d._waveDrag;
+  if (!drag) return;
+  if (!force && now - drag.last < 90) return;
+  drag.last = now;
+  applyWaveTarget(i, waveTarget(i, drag.pos, clientX === null ? 0 : clientX - drag.x));
+  if (clientX !== null) { drag.pos = engine.decks[i].position(); drag.x = clientX; }
+}
+function startWaveDrag(hand, el, x) {
+  const i = decks.findIndex(d => d.el.contains(el));
+  if (i < 0 || !engine || !decks[i].track) return;
+  waveDrags.set(hand, { deck: i, pos: engine.decks[i].position(), x, last: 0 });
+}
+function moveWaveDragGesture(hand, x) {
+  const drag = waveDrags.get(hand);
+  if (!drag || !engine) return;
+  const now = performance.now();
+  if (now - drag.last < 90) return;
+  drag.last = now;
+  applyWaveTarget(drag.deck, waveTarget(drag.deck, drag.pos, x - drag.x));
+  drag.pos = engine.decks[drag.deck].position(); drag.x = x;
+}
+function endWaveDragGesture(hand) {
+  const drag = waveDrags.get(hand);
+  if (drag && engine && decks[drag.deck].track) applyWaveTarget(drag.deck, waveTarget(drag.deck, drag.pos, 0));
+  waveDrags.delete(hand);
+}
+// ---------- Scratch minimo (velocidad del jog, sin reverse) ----------
+// AudioBufferSourceNode no admite rate negativo: girar "hacia atras" lleva
+// el rate a ~0 en vez de sonar al reves. El reverse real exige AudioWorklet
+// (pendiente, ver docs/estado.md). Al soltar se vuelve al rate del deck con
+// la rampa de setRate (~30 ms) y position() sigue continua.
+const scratches = new Map();
+function startScratch(key, i, y) {
+  if (i < 0 || !engine) return;
+  ensureEngine(); const ch = engine.decks[i];
+  if (!ch.buffer || scratches.has(key)) return;
+  const wasPaused = !ch.playing;
+  if (wasPaused) ch.play();
+  scratches.set(key, { deck: i, baseRate: ch.rate, wasPaused, lastY: y, lastT: performance.now(), rev: 0 });
+  status(`Scratch deck ${decks[i].name}: mueve para girar el disco; suelta para volver a la velocidad normal.`);
+}
+function applyScratchRev(key, rev) {
+  const s = scratches.get(key); if (!s || !engine) return;
+  s.rev = 0.55 * rev + 0.45 * s.rev;
+  engine.decks[s.deck].setRate(scratchRate(s.rev, s.baseRate));
+}
+function moveScratchGesture(key, y) {
+  const s = scratches.get(key); if (!s) return;
+  const now = performance.now(), dt = Math.max(1, now - s.lastT) / 1000;
+  const rev = -(y - s.lastY) / 140 / dt; // 140 px/s de mano = 1 vuelta/s
+  s.lastY = y; s.lastT = now;
+  applyScratchRev(key, rev);
+}
+function endScratch(key) {
+  const s = scratches.get(key); if (!s) return;
+  scratches.delete(key);
+  if (!engine) return;
+  const ch = engine.decks[s.deck];
+  if (s.wasPaused) ch.pause(); // queda pausado en la posicion alcanzada
+  else ch.setRate(s.baseRate);
+}
+function endAllScratches() { for (const k of [...scratches.keys()]) endScratch(k); }
 function triggerEl(el, x) {
   if (el.classList.contains('wave')) {
     const deckEl = el.closest('.deck'), i = decks.findIndex(d => d.el === deckEl), r = el.getBoundingClientRect(), sr = stage.getBoundingClientRect();
@@ -443,7 +824,7 @@ $('#btnGestures').onclick = e => {
   $('#gesturePaused').style.display = gesturesOn ? 'none' : 'block';
   $('#chipGest').textContent = gesturesOn ? 'Gestos: activos' : 'Gestos: pausados'; $('#chipGest').classList.toggle('on', gesturesOn);
   hands.forEach(h => { h.needRelease = true; h.pinch.reset(); });
-  if (!gesturesOn) { registry.releaseAll(); endKnobDrag(); two.reset(); freezeExpressive('Gestos pausados.'); document.querySelectorAll('[data-focus]').forEach(el => el.removeAttribute('data-focus')); $('#focusTag').hidden = true; }
+  if (!gesturesOn) { registry.releaseAll(); endKnobDrag(); endAllScratches(); two.reset(); freezeExpressive('Gestos pausados.'); if (fx.freeze()) fxRender(); document.querySelectorAll('[data-focus]').forEach(el => el.removeAttribute('data-focus')); $('#focusTag').hidden = true; }
 };
 $('#btnDiag').onclick = e => { diag = !diag; e.target.setAttribute('aria-pressed', diag); if (!diag) overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height); };
 $('#btnGuide').onclick = () => $('#guide').scrollIntoView({ behavior: 'smooth' });
@@ -453,6 +834,10 @@ document.addEventListener('keydown', e => {
   if (k === 'q') deckAction(0, 'play'); if (k === 'a') deckAction(0, 'cue', decks[0].el.querySelector('.cue'));
   if (k === 'p') deckAction(1, 'play'); if (k === 'l') deckAction(1, 'cue', decks[1].el.querySelector('.cue'));
   if (k === 'g') $('#btnGestures').click();
+  if (k === 'e') { if (!$('#fxEnabled').checked) { $('#fxEnabled').checked = true; $('#fxPanel').hidden = false; } fx.openPalette(); fxCycle(0); }
+  if (k === 'enter' && fx.state === 'palette') { fx.prepare(fxCurrentValue()); fxRender(); }
+  if (k === 'escape') { if (fx.state === 'adjusting') fx.freeze(); else fx.closePalette(); fxRender(); }
+  if (k === 'x') { fx.unprepare(); fxRender(); }
   if (k === 'c' && $('#clawEnabled').checked) setClawEnabled(false);
   if (k === 'arrowleft' || k === 'arrowright') { const c = $('#cross'); c.value = clamp(Number(c.value) + (k === 'arrowright' ? 0.08 : -0.08), -1, 1); c.dispatchEvent(new Event('input', { bubbles: true })); }
 });
@@ -462,13 +847,21 @@ function loop() {
   if (engine) {
     decks.forEach((d, i) => {
       const ch = engine.decks[i];
-      if (d.loop && ch.playing && ch.position() > d.loop.start + d.loop.len) ch.seek(d.loop.start);
       if (d.track) { d.el.querySelector('.pos').textContent = fmt(ch.position()); d.el.querySelector('.rem').textContent = '-' + fmt(d.track.buffer.duration - ch.position()); drawWave(d); }
       const m = d.el.querySelector('.chmeter'); if (m) m.style.width = `${Math.min(100, ch.level() * 100)}%`;
     });
     const ml = engine.masterLevel(), mm = $('#masterMeter'); if (mm) mm.style.width = `${Math.min(100, ml * 100)}%`;
-    $('#clipWarn').hidden = ml < 0.98;
-    refreshTransport(); syncAllKnobs(); if (performance.now() - autoDjLastCheck > 250) { autoDjLastCheck = performance.now(); checkAutoDj(autoDjLastCheck); if (!$('#fxPanel').hidden) fxRender(); }
+    // Saturacion con hold de 500 ms y espacio reservado: no parpadea ni
+    // mueve la barra. Rojo si el limitador esta actuando fuerte.
+    const cw = $('#clipWarn'), nowMs = performance.now();
+    const cs = clipState(loop._clipUntil || 0, ml, nowMs);
+    loop._clipUntil = cs.until;
+    const limiting = engine.limiter.reduction < -3;
+    if (limiting) loop._clipUntil = nowMs + 500;
+    cw.style.visibility = (cs.on || limiting) ? 'visible' : 'hidden';
+    cw.textContent = limiting ? 'LIMITADOR' : 'SATURACIÓN';
+    cw.classList.toggle('limiting', !!limiting);
+    refreshTransport(); syncAllKnobs(); drawSpectrum(); if (performance.now() - autoDjLastCheck > 250) { autoDjLastCheck = performance.now(); checkAutoDj(autoDjLastCheck); if (!$('#fxPanel').hidden) fxRender(); }
   }
   if (!gesturesOn || !tracker) { hands.forEach((h, i) => { const c = $(`#handCursor${i}`); if (c) c.style.display = 'none'; }); return; }
   const res = tracker.detect(); rebuildRegistry();
@@ -488,9 +881,13 @@ function loop() {
     }
     ctx.fillStyle = '#fff'; ctx.fillText(mappingInfo(), 10, stage.clientHeight - 10);
   }
+  // Identidad estable: asigna detecciones a huecos por cercania de muneca,
+  // para que al cruzarse las manos un hueco no herede la mano de la otra.
+  const slotOf = assignHandSlots(hands.map(h => ({ wrist: h.wrist })), lms.map(lm => ({ wrist: lm?.[0] })));
   const pts = hands.map((h, hi) => {
-    const lm = lms[hi], cursor = $(`#handCursor${hi}`);
-    if (!lm) { if (h.seen && now - h.seen > 250) { registry.release(hi); h.pinch.reset(); h.needRelease = true; if (knobDrag?.hand === hi) endKnobDrag(); } cursor.style.display = 'none'; return null; }
+    const lm = slotOf[hi] >= 0 ? lms[slotOf[hi]] : null, cursor = $(`#handCursor${hi}`);
+    if (!lm) { if (h.missingSince === null) h.missingSince = now; if (now - h.missingSince > 800) h.wrist = null; if (h.seen && now - h.seen > 250) { registry.release(hi); h.pinch.reset(); h.needRelease = true; endKnobDrag(hi); endWaveDragGesture(hi); } cursor.style.display = 'none'; return null; }
+    h.wrist = lm[0]; h.missingSince = null;
     h.seen = now;
     const tip = coverPoint(lm[8]), x = h.smoothX.update(tip.x), y = h.smoothY.update(tip.y);
     h.pinch.on = Number($('#calSens').value); h.pinch.off = h.pinch.on + 0.14;
@@ -503,7 +900,7 @@ function loop() {
   let twoBusy = false;
   if (twoOn && pts[0] && pts[1]) {
     const bothPinched = pts.every(p => p.det.pinched), ev = two.update({ bothPinched, bothPresent: true }, now);
-    if (bothPinched) { registry.releaseAll(); endKnobDrag(); twoBusy = true; }
+    if (bothPinched) { registry.releaseAll(); endKnobDrag(); endAllScratches(); twoBusy = true; }
     if (ev.event === 'prepared') { const t = Number($('#twoTarget').value); twoBanner(`Transición «Mezcla suave» hacia ${t === 1 ? 'B' : 'A'} PREPARADA: crossfader + graves + eco (${$('#twoDuration').value / 1000}s). Suelta ambas manos y confirma con el botón o una segunda pinza doble.`); twoStatus('Preparada. Esperando confirmación explícita.'); $('#btnTwoConfirm').disabled = false; }
     if (ev.event === 'armed') twoStatus('Lista: pulsa Confirmar o haz pinza con ambas manos para iniciar.');
     if (ev.event === 'confirmed') { $('#btnTwoConfirm').disabled = true; confirmTwoHand(); }
@@ -516,9 +913,49 @@ function loop() {
       $('#twoFilter').style.width = `${(vals.filter + 50)}%`; $('#twoFilterVal').textContent = `${Math.round(vals.filter)}`;
     }
   } else if (twoOn) { const ev = two.update({ bothPinched: false, bothPresent: false }, now); if (ev.event === 'freeze') freezeExpressive('Se perdió una mano.'); }
+  // --- FX a dos pinzas: solo con efecto preparado, en el aire (sin control
+  // bajo ninguna mano) y sin agarres/transicion/Auto DJ. La mesa manda. ---
+  let fxBusy = false;
+  if (fx.state === 'prepared' || fx.state === 'frozen' || fx.state === 'adjusting') {
+    const bothPresent = !!(pts[0] && pts[1]), bothPinched = bothPresent && pts.every(p => p.det.pinched);
+    if (fx.state === 'adjusting' && !bothPresent) {
+      if (fx.notePresence({ bothPresent: false, bothPinched: false }, now) === 'frozen') fxRender();
+      fxBusy = fx.state === 'adjusting';
+    } else if (bothPresent) {
+      const noHit = pts.every(p => !registry.hit(p.x, p.y));
+      const can = fxCanAdjust({ anyGrabbed: !!registry.grabbedBy(0) || !!registry.grabbedBy(1), twoHandBusy: twoBusy || expressiveActive, autoTransition: !!smartTimer }) && noHit;
+      if (loop._fxNeedRelease) { if (!bothPinched) loop._fxNeedRelease = false; }
+      else if (fx.state !== 'adjusting' && bothPinched && can) {
+        const left = pts[0].x <= pts[1].x ? pts[0] : pts[1];
+        fx.beginAdjust({ value: fxCurrentValue(), y: left.y, dist01: handsDistance(pts[0], pts[1], stage.clientWidth), feedback: engine ? engine.delayFb.gain.value : 0.32 });
+        fxBusy = true; fxRender();
+      } else if (fx.state === 'adjusting') {
+        fxBusy = true;
+        if (fx.notePresence({ bothPresent: true, bothPinched }, now) === 'frozen') fxRender();
+        else if (bothPinched) {
+          const left = pts[0].x <= pts[1].x ? pts[0] : pts[1];
+          const r = fx.adjust({ y: left.y, dist01: handsDistance(pts[0], pts[1], stage.clientWidth) });
+          if (r) { fxApplyValue(r.value, r.feedback); fxRender(); }
+        }
+      }
+    }
+  }
+  // Con la paleta abierta, mantener la pinza doble prepara el efecto elegido
+  // (todavia sin tocar el audio). Elegir tarjeta: pinza sobre ella o teclado.
+  if (loop._fxNeedRelease && !(pts[0]?.det.pinched && pts[1]?.det.pinched)) loop._fxNeedRelease = false;
+  if (fx.state === 'palette' && !loop._fxNeedRelease && pts[0] && pts[1] && pts.every(p => p.det.pinched) && !registry.grabbedBy(0) && !registry.grabbedBy(1)) {
+    loop._fxPalHold = loop._fxPalHold || now;
+    if (now - loop._fxPalHold >= 700) { fx.prepare(fxCurrentValue()); fxRender(); loop._fxPalHold = null; loop._fxNeedRelease = true; status('FX preparado con pinza doble. Suelta y vuelve a pinzar con cada mano para ajustar.'); }
+  } else loop._fxPalHold = null;
+  // Abrir la paleta con pinza doble mantenida (llave de reserva) solo si la
+  // transicion a dos manos esta desactivada: nunca roba su gesto.
+  if (fx.state === 'idle' && $('#fxEnabled').checked && !twoOn && pts[0] && pts[1] && pts.every(p => p.det.pinched) && !registry.grabbedBy(0) && !registry.grabbedBy(1) && pts.every(p => !registry.hit(p.x, p.y))) {
+    loop._fxHold = loop._fxHold || now;
+    if (now - loop._fxHold >= 700) { fx.openPalette(); fxRender(); loop._fxHold = null; loop._fxNeedRelease = true; }
+  } else loop._fxHold = null;
   // --- Garra: una mano sin pinza; cede ante pinza, dos manos y transicion ---
   clawHand = -1;
-  const gate = clawGate({ enabled: $('#clawEnabled').checked, handCount: pts.filter(Boolean).length, anyPinched: pts.some(p => p?.det.pinched), anyGrabbed: !!registry.grabbedBy(0) || !!registry.grabbedBy(1), twoHandBusy: twoBusy, expressiveActive, autoTransition: !!smartTimer });
+  const gate = clawGate({ enabled: $('#clawEnabled').checked, handCount: pts.filter(Boolean).length, anyPinched: pts.some(p => p?.det.pinched), anyGrabbed: !!registry.grabbedBy(0) || !!registry.grabbedBy(1), twoHandBusy: twoBusy || fxBusy, expressiveActive, autoTransition: !!smartTimer });
   if (!gate.run && $('#clawEnabled').checked && claw.engaged) { claw.update(null, now, { min: 0, max: 1, sensitivity: 1, invert: false, rangeMin01: 0, rangeMax01: 1 }); $('#clawStatus').textContent = `Garra soltada (${gate.reason}). Valor conservado; pinza y dos manos libres.`; }
   if (gate.run) {
     const hi = pts.findIndex(p => p);
@@ -541,13 +978,13 @@ function loop() {
     const hit = registry.hit(p.x, p.y);
     if (hit && !p.det.pinched) { hit.el.setAttribute('data-focus', '1'); focusLabel = controlLabel(hit.el); $(`#handCursor${hi}`).querySelector('span').textContent = focusLabel; }
     else $(`#handCursor${hi}`).querySelector('span').textContent = p.det.pinched ? 'TOMADO' : '';
-    if (twoBusy || expressiveActive || hi === clawHand) return;
+    if (twoBusy || fxBusy || expressiveActive || hi === clawHand) return;
     const grabbedId = registry.grabbedBy(hi);
-    if (grabbedId) { const c = registry.controls.get(grabbedId); if (c?.el?.dataset.g === 'range') setRangeFromPoint(c.el, p.x, p.y); if (c?.el?.dataset.g === 'knob' && knobDrag?.hand === hi) moveKnobDrag(p.x); if (c) c.el.setAttribute('data-grabbed', '1'); }
+    if (grabbedId) { const c = registry.controls.get(grabbedId); if (c?.el?.dataset.g === 'range') setRangeFromPoint(c.el, p.x, p.y); if (c?.el?.dataset.g === 'knob') moveKnobDrag(hi, p.x); if (c?.el?.classList.contains('wave')) moveWaveDragGesture(hi, p.x); if (c?.el?.dataset.g === 'jog') moveScratchGesture(hi, p.y); if (c) c.el.setAttribute('data-grabbed', '1'); }
     if (p.det.started && !h.needRelease && hit) {
-      if (hit.el.dataset.g === 'range') { if (registry.grab(hi, hit.id)) setRangeFromPoint(hit.el, p.x, p.y); } else if (hit.el.dataset.g === 'knob') { if (registry.grab(hi, hit.id)) startKnobDrag(hit.el, p.x, hi); } else triggerEl(hit.el, p.x);
+      if (hit.el.dataset.g === 'range') { if (registry.grab(hi, hit.id)) setRangeFromPoint(hit.el, p.x, p.y); } else if (hit.el.dataset.g === 'knob') { if (registry.grab(hi, hit.id)) startKnobDrag(hit.el, p.x, hi); } else if (hit.el.dataset.g === 'jog') { if (registry.grab(hi, hit.id)) startScratch(hi, decks.findIndex(d => d.el.contains(hit.el)), p.y); } else { triggerEl(hit.el, p.x); if (hit.el.classList.contains('wave')) startWaveDrag(hi, hit.el, p.x); }
     }
-    if (p.det.ended) { registry.release(hi); h.needRelease = false; if (knobDrag?.hand === hi) endKnobDrag(); }
+    if (p.det.ended) { registry.release(hi); h.needRelease = false; endKnobDrag(hi); endWaveDragGesture(hi); endScratch(hi); }
     if (diag) {
       ctx.fillStyle = hi ? '#f472b6' : '#22d3ee';
       p.lm.forEach(pt0 => { const pt = coverPoint(pt0); ctx.fillRect(pt.x - 2, pt.y - 2, 4, 4); });

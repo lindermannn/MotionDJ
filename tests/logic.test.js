@@ -207,6 +207,188 @@ test('selector de efectos: recorrer no toca parametros y conserva el deck', asyn
   assert.equal(cycleEffect(s, -1).effectId, EFFECT_CATALOG.at(-1).id); // y envuelve al ultimo
   assert.equal(effectById('no-existe').id, EFFECT_CATALOG[0].id);
 });
+test('Channel: position() continua tras cambio de rate, siguiendo la rampa real', async () => {
+  const { Channel } = await import('../src/audio/engine.js');
+  const node = () => ({ connect() {}, gain: { value: 0, setTargetAtTime() {} }, frequency: { value: 0, setTargetAtTime() {} }, Q: { value: 0 } });
+  const ctx = { currentTime: 0, createGain: node, createBiquadFilter: node, createAnalyser: node,
+    createBufferSource: () => ({ buffer: null, playbackRate: { value: 1, setTargetAtTime() {} }, connect() {}, start() {}, stop() {}, onended: null, loop: false }) };
+  const ch = new Channel(ctx, node());
+  ch.load({ duration: 100 });
+  ch.play(); // t=0, posicion 0, rate 1
+  ctx.currentTime = 2;
+  assert.ok(Math.abs(ch.position() - 2) < 1e-9);
+  ch.setRate(1.4);
+  assert.ok(Math.abs(ch.position() - 2) < 1e-9, 'sin salto al cambiar el rate');
+  // Posicion "real" del audio: integracion numerica de la rampa setTargetAtTime
+  // (v = destino + (inicio-destino)*exp(-t/tau)), en pasos de 0,25 ms.
+  let real = 2, t = 2, from = 1, to = 1.4, t0 = 2;
+  const stepTo = (end) => { const dt = 0.00025; while (t < end) { real += (to + (from - to) * Math.exp(-(t - t0) / 0.03)) * dt; t += dt; ctx.currentTime = t; } };
+  stepTo(2.03); assert.ok(Math.abs(ch.position() - real) < 0.002, `durante la rampa: ${ch.position()} vs ${real}`);
+  stepTo(2.15); assert.ok(Math.abs(ch.position() - real) < 0.002, 'tras la rampa');
+  // Segundo cambio a mitad de rampa: tambien continuo y fiel a la integral.
+  from = to + (from - to) * Math.exp(-(t - t0) / 0.03); to = 0.8; t0 = t;
+  const before2 = ch.position();
+  ch.setRate(0.8);
+  assert.ok(Math.abs(ch.position() - before2) < 1e-9, 'sin salto en el segundo cambio');
+  stepTo(2.8); assert.ok(Math.abs(ch.position() - real) < 0.002, `tras el segundo cambio: ${ch.position()} vs ${real}`);
+  ch.pause(); const paused = ch.position();
+  ctx.currentTime = 5; assert.equal(ch.position(), paused); // en pausa no avanza
+});
+test('beatgrid: demos a 122/124 con error <= 0,3 BPM y sinteticos con fase +-20 ms', async () => {
+  const { analyzeBeatgrid } = await import('../src/audio/beatgrid.js');
+  const { readFileSync } = await import('node:fs');
+  const readWav = (url) => {
+    const b = readFileSync(url);
+    const sr = b.readUInt32LE(24), n = (b.length - 44) / 4, d = new Float32Array(n);
+    for (let i = 0; i < n; i++) d[i] = (b.readInt16LE(44 + i * 4) + b.readInt16LE(46 + i * 4)) / 65536;
+    return { d, sr };
+  };
+  for (const [f, real] of [['../public/audio/demo-a.wav', 122], ['../public/audio/demo-b.wav', 124]]) {
+    const { d, sr } = readWav(new URL(f, import.meta.url));
+    const r = analyzeBeatgrid(d, sr);
+    assert.ok(Math.abs(r.bpm - real) <= 0.3, `${f}: ${r.bpm} vs ${real}`);
+    assert.ok(r.confidence > 0.3, `${f} confianza ${r.confidence}`);
+    assert.ok(r.firstBeat >= 0 && r.firstBeat < 60 / r.bpm, 'fase dentro del periodo');
+  }
+  const synth = (bpm, offset, sub = 0) => {
+    const sr = 44100, dur = 12, data = new Float32Array(sr * dur), beat = 60 / bpm;
+    const kick = (t0, amp) => { const n0 = Math.floor(t0 * sr); for (let i = 0; i < sr * 0.12 && n0 + i < data.length; i++) { const tt = i / sr; data[n0 + i] += Math.sin(2 * Math.PI * (58 - tt * 160) * tt) * Math.exp(-tt * 28) * amp; } };
+    for (let tt = offset; tt < dur; tt += beat) { kick(tt, 0.95); if (sub) kick(tt + beat / 2, sub); }
+    return data;
+  };
+  for (const [bpm, off] of [[90, 0.31], [128, 0.47], [174, 0.12]]) {
+    const r = analyzeBeatgrid(synth(bpm, off), 44100);
+    assert.ok(Math.abs(r.bpm - bpm) <= 0.3, `synth ${bpm}: ${r.bpm}`);
+    assert.ok(Math.abs(r.firstBeat - off) <= 0.02, `synth ${bpm} fase: ${r.firstBeat} vs ${off}`);
+  }
+  // Sin ambiguedad en los casos limpios medidos (90 y 174).
+  assert.equal(analyzeBeatgrid(synth(90, 0.31), 44100).ambiguous, false);
+  assert.equal(analyzeBeatgrid(synth(174, 0.12), 44100).ambiguous, false);
+  const amb = analyzeBeatgrid(synth(100, 0.2, 0.6), 44100);
+  assert.equal(amb.ambiguous, true, 'subdivision fuerte marca ambiguedad');
+  assert.ok(Math.abs(amb.bpm - 100) <= 0.3 || Math.abs(amb.bpm - 200) <= 0.6, `octava avisada: ${amb.bpm}`);
+});
+test('beatgrid: cuantizacion, alineacion de fase, TAP y tiempo de eco', async () => {
+  const { quantizeToBeat, beatPhase01, alignToPhase, tapTempo, beatDelayTime } = await import('../src/audio/beatgrid.js');
+  const grid = { bpm: 120, firstBeat: 0.25 }; // tiempo = 0,5 s
+  assert.equal(quantizeToBeat(1.3, grid), 1.25);
+  assert.equal(quantizeToBeat(1.41, grid), 1.25);
+  assert.equal(quantizeToBeat(1.45, grid), 1.25);
+  assert.equal(quantizeToBeat(1.6, grid), 1.75);
+  assert.equal(beatPhase01(1.25, grid), 0);
+  assert.ok(Math.abs(beatPhase01(1.5, grid) - 0.5) < 1e-9);
+  const aligned = alignToPhase(3.1, grid, 0.5);
+  assert.ok(Math.abs(beatPhase01(aligned, grid) - 0.5) < 1e-9 && Math.abs(aligned - 3.1) <= 0.25);
+  assert.equal(quantizeToBeat(1.3, null), 1.3); // sin rejilla no toca nada
+  assert.equal(tapTempo([0, 500, 1000, 1500]), 120);
+  assert.equal(tapTempo([0, 500]), null);
+  assert.ok(Math.abs(beatDelayTime(120, 0.5) - 0.25) < 1e-9);
+  assert.ok(Math.abs(beatDelayTime(128, 0.25) - 60 / 128 * 0.25) < 1e-9);
+  assert.equal(beatDelayTime(null, 0.5), null); // sin BPM: eco sin sincronizar
+});
+test('SYNC con BPM efectivo: converge al pulsar en ambos decks y es idempotente', async () => {
+  const { syncTempoPct, effectiveBpm } = await import('../src/audio/beatgrid.js');
+  // Caso observado: A 154,1 y B 152,0, sin tempo aplicado.
+  let a = { bpm: 154.1, tempo: 0 }, b = { bpm: 152.0, tempo: 0 };
+  let s = syncTempoPct(a.bpm, b.bpm, b.tempo);
+  assert.ok(s.ok); a.tempo = s.pct;
+  assert.ok(Math.abs(effectiveBpm(a.bpm, a.tempo) - 152.0) < 1e-9);
+  // Ahora SYNC en B: el objetivo es el efectivo de A (152), no su nominal.
+  s = syncTempoPct(b.bpm, a.bpm, a.tempo);
+  assert.ok(s.ok); b.tempo = s.pct;
+  assert.ok(Math.abs(effectiveBpm(b.bpm, b.tempo) - effectiveBpm(a.bpm, a.tempo)) < 1e-9, 'mismo BPM efectivo');
+  // Segunda vez en cada deck: no cambia nada.
+  assert.ok(Math.abs(syncTempoPct(a.bpm, b.bpm, b.tempo).pct - a.tempo) < 0.051);
+  assert.ok(Math.abs(syncTempoPct(b.bpm, a.bpm, a.tempo).pct - b.tempo) < 0.051);
+  // Con tempo previo en el otro: A a 124 con +4% debe mandar sobre B a 120.
+  s = syncTempoPct(120, 124, 4);
+  assert.ok(Math.abs(s.effectiveOther - 128.96) < 1e-9 && Math.abs(s.pct - 7.4667) < 0.01);
+  assert.equal(syncTempoPct(null, 124, 0).ok, false); // sin BPM no actua
+  assert.equal(syncTempoPct(120, null, 0).ok, false);
+  assert.equal(syncTempoPct(100, 130, 0).reason, 'fuera-rango'); // limite +-8 %
+});
+test('eco sigue al BPM efectivo: al corregir BPM, deck o fraccion se recalcula', async () => {
+  const { ecoDelayFor } = await import('../src/audio/beatgrid.js');
+  assert.ok(Math.abs(ecoDelayFor(120, 0, 0.5).sec - 0.25) < 1e-9);
+  assert.ok(Math.abs(ecoDelayFor(120, 0, 0.25).sec - 0.125) < 1e-9);
+  // Corregir el BPM a la mitad duplica el tiempo del eco.
+  assert.ok(Math.abs(ecoDelayFor(60, 0, 0.5).sec - 0.5) < 1e-9);
+  // Con tempo aplicado +25 %, el eco usa el efectivo (150), no el nominal.
+  const e = ecoDelayFor(120, 25, 1);
+  assert.ok(Math.abs(e.effectiveBpm - 150) < 1e-9 && Math.abs(e.sec - 0.4) < 1e-9);
+  assert.equal(ecoDelayFor(null, 0, 0.5), null); // sin BPM: no tocar el tiempo
+});
+test('perillas: dos manos en dos perillas, rangos EQ/Trim y filtro bipolar', () => {
+  const r = new ControlRegistry();
+  r.register('lowA', { x: 0, y: 0, w: 84, h: 84 }, { z: 1 });
+  r.register('highB', { x: 60, y: 0, w: 84, h: 84 }, { z: 1 }); // zonas solapadas a proposito
+  assert.equal(r.hit(70, 42).id, 'lowA'); // a igual z gana la primera zona que contiene... ver hit: la especifica
+  assert.equal(r.grab(0, 'lowA'), true);
+  assert.equal(r.grab(1, 'lowA'), false); // no roba
+  assert.equal(r.grab(1, 'highB'), true);
+  assert.equal(r.grabbedBy(0), 'lowA'); assert.equal(r.grabbedBy(1), 'highB');
+  r.release(0); assert.equal(r.grabbedBy(1), 'highB'); // liberar una no libera la otra
+  // Rangos: TRIM 0..2 desde 1; FILTRO bipolar -50..50 desde el centro 0.
+  assert.equal(knobDragValue(1, 220, 0, 2, 220), 2);
+  assert.equal(knobDragValue(1, -110, 0, 2, 220), 0);
+  assert.equal(knobDragValue(1, -55, 0, 2, 220), 0.5);
+  assert.equal(knobDragValue(0, 0, -50, 50, 220), 0); // filtro al pinzar en el centro: sin salto
+  assert.equal(knobAngle(0, -50, 50), 0); // centro = aguja arriba (marca)
+  assert.equal(knobDragValue(0, 220, -50, 50, 220), 50);
+  assert.equal(knobDragValue(0, -220, -50, 50, 220), -50);
+});
+test('cola: orden, siguiente al deck libre y nunca sobre un deck que suena', async () => {
+  const { enqueue, removeFromQueue, takeNext, chooseTargetDeck, freeDeckIndex } = await import('../src/audio/queue.js');
+  let q = enqueue(enqueue([], 'a'), 'b');
+  assert.deepEqual(q, ['a', 'b']);
+  const t1 = takeNext(q); assert.equal(t1.track, 'a'); assert.deepEqual(t1.queue, ['b']);
+  assert.deepEqual(removeFromQueue(['a', 'b', 'c'], 1), ['a', 'c']);
+  assert.equal(takeNext([]).track, null);
+  assert.equal(freeDeckIndex([true, false]), 1);
+  assert.equal(freeDeckIndex([true, true]), -1);
+  // Prefiere el deck vacio y parado; si los dos tienen pista, el parado.
+  assert.equal(chooseTargetDeck([{ hasTrack: true, playing: true }, { hasTrack: false, playing: false }]), 1);
+  assert.equal(chooseTargetDeck([{ hasTrack: true, playing: true }, { hasTrack: true, playing: false }]), 1);
+  assert.equal(chooseTargetDeck([{ hasTrack: false, playing: false }, { hasTrack: true, playing: true }]), 0);
+  assert.equal(chooseTargetDeck([{ hasTrack: true, playing: true }, { hasTrack: true, playing: true }]), -1);
+});
+test('scratch: velocidad del jog a rate, limites y angulo desenvuelto', async () => {
+  const { scratchRate, jogAngleDelta } = await import('../src/gestures/logic.js');
+  assert.equal(scratchRate(0, 1), 0); // jog quieto: la pista casi se detiene
+  assert.ok(Math.abs(scratchRate(0.5, 1) - 0.9) < 1e-9); // 0,5 vueltas/s x 1,8 s/vuelta
+  assert.equal(scratchRate(-2, 1), scratchRate(2, 1)); // atras = frenar (sin reverse)
+  assert.equal(scratchRate(10, 1), 3); // limite de velocidad
+  assert.ok(Math.abs(scratchRate(0.5, 1.2) - 1.08) < 1e-9); // respeta el rate del deck
+  assert.ok(Math.abs(jogAngleDelta(3.1, -3.1) - (2 * Math.PI - 6.2)) < 1e-9); // cruza el corte
+  assert.ok(Math.abs(jogAngleDelta(0, 0.5) - 0.5) < 1e-9);
+});
+test('onda: arrastre fino anclado sin salto, con topes y sensibilidad', async () => {
+  const { waveDragPosition } = await import('../src/gestures/logic.js');
+  assert.equal(waveDragPosition(30, 0, 240), 30); // al pinzar no hay salto
+  assert.equal(waveDragPosition(30, 22, 240), 31); // 22 px = 1 s (220 px/10 s)
+  assert.equal(waveDragPosition(30, 220, 240), 40);
+  assert.equal(waveDragPosition(30, -220, 240), 20);
+  assert.equal(waveDragPosition(30, 220, 240, 440), 35); // doble recorrido = mitad
+  assert.equal(waveDragPosition(5, -9999, 240), 0); // topes
+  assert.equal(waveDragPosition(235, 9999, 240), 240);
+});
+test('saturacion: hold de 500 ms y ajustes del limitador con techo -3 dB', async () => {
+  const { clipState, LIMITER_SETTINGS } = await import('../src/audio/engine.js');
+  assert.equal(clipState(0, 0.5, 1000).on, false); // nivel normal: apagado
+  const hit = clipState(0, 0.95, 1000);
+  assert.equal(hit.on, true); assert.equal(hit.until, 1500); // pico: hold 500 ms
+  assert.equal(clipState(hit.until, 0.1, 1400).on, true); // dentro del hold sigue
+  assert.equal(clipState(hit.until, 0.1, 1501).on, false); // despues se apaga
+  assert.equal(LIMITER_SETTINGS.threshold, -3);
+  assert.ok(LIMITER_SETTINGS.ratio >= 20 && LIMITER_SETTINGS.attack <= 0.001);
+  // Curva de techo: lineal en la zona normal y nunca por encima de -3 dB.
+  const { makeCeilingCurve } = await import('../src/audio/engine.js');
+  const curve = makeCeilingCurve(1025);
+  assert.ok(Math.abs(curve[512]) < 1e-9); // centro en 0
+  assert.ok(Math.abs(curve[768] - 0.5) < 0.002); // zona lineal (x=0,5)
+  assert.ok(Math.max(...curve) <= 0.708 && Math.min(...curve) >= -0.708);
+  assert.ok(curve[1024] > 0.7); // cerca del techo en la entrada maxima
+});
 test('perilla: arrastre relativo sin salto, recorrido ajustable y topes', () => {
   // LOW de -24 a +24, parte de -6 (valor actual: al pinzar no hay salto)
   assert.equal(knobDragValue(-6, 0, -24, 24, 220), -6);
@@ -218,6 +400,53 @@ test('perilla: arrastre relativo sin salto, recorrido ajustable y topes', () => 
   assert.equal(knobAngle(-24, -24, 24), -135);
   assert.equal(knobAngle(0, -24, 24), 0);
   assert.equal(knobAngle(24, -24, 24), 135);
+});
+test('identidad de manos: al cruzarse no se intercambian y al reentrar se recupera el hueco', async () => {
+  const { assignHandSlots } = await import('../src/gestures/logic.js');
+  const prev = [{ wrist: { x: 0.2, y: 0.5 } }, { wrist: { x: 0.8, y: 0.5 } }];
+  // MediaPipe devuelve las manos en orden contrario tras el cruce.
+  const crossed = assignHandSlots(prev, [{ wrist: { x: 0.79, y: 0.51 } }, { wrist: { x: 0.21, y: 0.49 } }]);
+  assert.deepEqual(crossed, [1, 0]); // hueco 0 sigue a su mano, no al indice del array
+  // Reentrada: una sola mano cerca del hueco 1 lo recupera; la otra queda libre.
+  const back = assignHandSlots(prev, [{ wrist: { x: 0.82, y: 0.48 } }]);
+  assert.deepEqual(back, [-1, 0]);
+  // Mano lejana a ambos huecos: se asigna al primer hueco libre, sin robar.
+  const far = assignHandSlots([{ wrist: null }, { wrist: { x: 0.8, y: 0.5 } }], [{ wrist: { x: 0.1, y: 0.9 } }]);
+  assert.deepEqual(far, [0, -1]);
+  // Sin detecciones: ningun hueco recibe mano.
+  assert.deepEqual(assignHandSlots(prev, []), [-1, -1]);
+});
+test('FX a dos pinzas: preparar no toca el valor, ajustar no salta y soltar congela', async () => {
+  const { FxSession, fxCanAdjust } = await import('../src/audio/fx-twohand.js');
+  const fx = new FxSession();
+  assert.equal(fx.state, 'idle');
+  fx.openPalette(); assert.equal(fx.state, 'palette');
+  fx.select('delay', 1);
+  assert.equal(fx.value, 0); // seleccionar todavia no cambia el audio
+  fx.prepare(0.2); assert.equal(fx.state, 'prepared'); assert.equal(fx.value, 0.2);
+  fx.beginAdjust({ value: 0.2, y: 300, dist01: 0.4, feedback: 0.32 });
+  assert.equal(fx.state, 'adjusting');
+  assert.equal(fx.adjust({ y: 300, dist01: 0.4 }).value, 0.2); // sin movimiento: sin salto
+  const up = fx.adjust({ y: 170, dist01: 0.4 }); // subir la mano izquierda 130 px (medio recorrido)
+  assert.ok(Math.abs(up.value - 0.6) < 1e-9, `cantidad a mitad de rango: ${up.value}`);
+  const wide = fx.adjust({ y: 170, dist01: 1 }); // separar manos: realimentacion con techo 0,5
+  assert.equal(wide.feedback, 0.5);
+  assert.equal(fx.notePresence({ bothPresent: true, bothPinched: false }, 1000), 'frozen'); // soltar congela
+  assert.equal(fx.state, 'frozen'); assert.equal(fx.value, up.value); // valor conservado
+  fx.beginAdjust({ value: fx.value, y: 100, dist01: 0.5, feedback: 0.5 });
+  assert.equal(fx.notePresence({ bothPresent: false, bothPinched: false }, 2000), null); // perder mano <300 ms no congela aun
+  assert.equal(fx.notePresence({ bothPresent: false, bothPinched: false }, 2400), 'frozen');
+  fx.unprepare(); assert.equal(fx.state, 'idle');
+  // Arbitro: la mesa, la transicion y Auto DJ mandan sobre el ajuste FX.
+  assert.equal(fxCanAdjust({ anyGrabbed: false, twoHandBusy: false, autoTransition: false }), true);
+  assert.equal(fxCanAdjust({ anyGrabbed: true, twoHandBusy: false, autoTransition: false }), false);
+  assert.equal(fxCanAdjust({ anyGrabbed: false, twoHandBusy: true, autoTransition: false }), false);
+  assert.equal(fxCanAdjust({ anyGrabbed: false, twoHandBusy: false, autoTransition: true }), false);
+  // Filtro: un solo parametro, rango bipolar acotado.
+  const f2 = new FxSession(); f2.openPalette(); f2.select('filter', 0); f2.prepare(0);
+  f2.beginAdjust({ value: 0, y: 200, dist01: 0.3, feedback: 0.32 });
+  assert.equal(f2.adjust({ y: -999, dist01: 0.9 }).value, 50); // tope, y sin segundo parametro
+  assert.equal(f2.adjust({ y: -999, dist01: 0.9 }).feedback, undefined);
 });
 test('suavizado reduce saltos y fader mapea bordes', () => {
   const s = new Smoother(0.5); s.update(0);

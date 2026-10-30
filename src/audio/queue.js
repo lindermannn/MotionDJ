@@ -1,0 +1,26 @@
+// Cola de reproduccion: logica pura, sin DOM.
+// La cola guarda referencias a pistas; "siguiente" siempre va al deck que
+// NO esta sonando. Nunca devuelve un deck en reproduccion.
+export function enqueue(queue, track) {
+  return track ? [...queue, track] : [...queue];
+}
+export function removeFromQueue(queue, index) {
+  return queue.filter((_, i) => i !== index);
+}
+export function takeNext(queue) {
+  if (!queue.length) return { track: null, queue: [] };
+  return { track: queue[0], queue: queue.slice(1) };
+}
+// Indice del deck libre: el que no suena. Si suenan los dos: -1.
+export function freeDeckIndex(playing) {
+  if (!playing[0]) return 0;
+  if (!playing[1]) return 1;
+  return -1;
+}
+// Deck destino para "siguiente": prefiere un deck sin pista y parado;
+// si no, el que no suena; si suenan los dos, -1 (nunca reemplazar sin mas).
+export function chooseTargetDeck(states) {
+  const empty = states.findIndex(s => !s.playing && !s.hasTrack);
+  if (empty >= 0) return empty;
+  return freeDeckIndex(states.map(s => s.playing));
+}

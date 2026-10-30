@@ -42,7 +42,9 @@ export class ControlRegistry {
       if (c.disabled) continue;
       const r = c.rect;
       if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
-        if (!best || (c.z || 0) >= (best.z || 0)) best = c;
+        // Gana mayor z; a igual z, la zona mas pequena (la mas especifica).
+        // Asi, con zonas ampliadas solapadas, no se toma la perilla vecina.
+        if (!best || (c.z || 0) > (best.z || 0) || ((c.z || 0) === (best.z || 0) && r.w * r.h < best.rect.w * best.rect.h)) best = c;
       }
     }
     return best;
@@ -70,6 +72,28 @@ export function knobValue(control, y, current) {
 export function knobDragValue(startValue, dxPx, min, max, pxFull = 220) {
   const px = pxFull > 0 ? pxFull : 220;
   return clamp(startValue + (dxPx / px) * (max - min), min, max);
+}
+// Scratch minimo por velocidad: el jog gira a revPerSec vueltas/s y cada
+// vuelta equivale a secPerRev segundos de pista. Sin velocidad negativa:
+// playbackRate no admite reverse (eso exigiria un worklet, ver estado.md).
+export function scratchRate(revPerSec, baseRate, secPerRev = 1.8) {
+  const speed = Math.abs(revPerSec) * secPerRev;
+  return Math.min(3, Math.max(0, speed)) * (baseRate || 1);
+}
+// Diferencia angular desenvuelta (-PI..PI) entre dos muestras del jog.
+export function jogAngleDelta(prev, curr) {
+  let d = curr - prev;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return d;
+}
+// Arrastre en la onda: clic/pinza = salto al punto; mantener y mover =
+// ajuste fino relativo anclado. pxPer10s: pixeles para recorrer 10 s de
+// pista (defecto 220, igual que el recorrido de perilla).
+export function waveDragPosition(startPos, dxPx, duration, pxPer10s = 220) {
+  const px = pxPer10s > 0 ? pxPer10s : 220;
+  const pos = startPos + (dxPx / px) * 10;
+  return Math.min(duration, Math.max(0, pos));
 }
 // Angulo de la aguja de una perilla: -135° (min) .. +135° (max).
 export function knobAngle(value, min, max) {
@@ -144,6 +168,32 @@ export function mapCoverPoint(lm, vw, vh, stageW, stageH, mirrored = true) {
 // Rectangulo del contenido del video dentro del escenario (diagnostico).
 export function videoViewport(vw, vh, stageW, stageH, fit = 'contain', pos = { x: 0.5, y: 0.5 }) {
   return videoContentRect(vw, vh, stageW, stageH, fit, pos);
+}
+// Identidad estable de manos: MediaPipe puede devolver las detecciones en
+// otro orden al cruzarse las manos. Empareja cada deteccion con el hueco
+// (slot 0/1) cuya muneca anterior este mas cerca; asi un hueco no hereda la
+// mano de la otra. Devuelve, por hueco, el indice de deteccion o -1.
+// Huecos sin muneca anterior o detecciones sin pareja van al primer hueco
+// libre, sin robar uno ocupado. maxDist en coordenadas normalizadas.
+export function assignHandSlots(prevSlots, detections, maxDist = 0.35) {
+  const slots = prevSlots || [], dets = detections || [];
+  const out = slots.map(() => -1);
+  const used = new Set(), pairs = [];
+  slots.forEach((s, si) => {
+    if (!s?.wrist) return;
+    dets.forEach((d, di) => { if (d?.wrist) pairs.push({ d: Math.hypot(s.wrist.x - d.wrist.x, s.wrist.y - d.wrist.y), si, di }); });
+  });
+  pairs.sort((a, b) => a.d - b.d);
+  for (const p of pairs) {
+    if (p.d > maxDist || out[p.si] !== -1 || used.has(p.di)) continue;
+    out[p.si] = p.di; used.add(p.di);
+  }
+  dets.forEach((d, di) => {
+    if (used.has(di)) return;
+    const free = out.indexOf(-1);
+    if (free >= 0) { out[free] = di; used.add(di); }
+  });
+  return out;
 }
 export function handsDistance(p0, p1, stageW) {
   return clamp(Math.hypot(p0.x - p1.x, p0.y - p1.y) / (stageW * 0.6));
