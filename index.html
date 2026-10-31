@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <title>MotionDJ — Controladora por gestos</title>
 <link rel="stylesheet" href="/src/styles/main.css" />
 </head>
@@ -44,14 +46,13 @@
     <video id="cam" playsinline muted></video>
     <canvas id="overlay"></canvas>
     <div id="console" class="console">
-      <div class="deck" id="deckA"></div>
+      <div class="deck deck-a" id="deckA"></div>
       <div class="mixer" id="mixer"></div>
       <div class="deck deck-b" id="deckB"></div>
     </div>
     <div id="handCursor0" class="cursor c0"><span></span></div>
     <div id="handCursor1" class="cursor c1"><span></span></div>
     <div id="focusTag" class="focus-tag" hidden></div>
-    <div id="knobBar" class="knob-bar" hidden><span id="knobBarLabel">LOW · DECK A</span><div class="knob-track" id="knobTrack"><i id="knobBarFill"></i><b id="knobBarDot"></b></div><span id="knobBarVal">0 dB</span></div>
     <div id="twoHandBanner" class="twohand-banner" hidden></div>
     <div id="fxPalette" class="fx-palette" hidden>
       <button type="button" class="fx-card" data-fx-card="filter"><strong>Filtro</strong><span>Deck elegido · mano izquierda sube/baja la cantidad</span></button>
@@ -61,6 +62,22 @@
     <div id="fxChip" class="fx-chip" hidden></div>
     <div id="gesturePaused" class="paused-banner">Gestos pausados — la música sigue. Pulsa «Gestos» o la tecla G para reanudar.</div>
     <div id="noCam" class="nocam">Cámara apagada — puedes usar mouse, teclado y táctil.<br><button class="btn" id="btnCam2">Activar cámara</button></div>
+<svg id="fxArc" class="fxarc" hidden aria-hidden="true"><path id="fxArcOutline" class="arc-outline"/><path id="fxArcGlow" class="arc-glow"/><path id="fxArcCore" class="arc-core"/><path id="fxArcSecond" class="arc-second"/><g id="fxArcHands"></g><circle id="fxArcMarker" class="arc-marker" r="7" hidden/><circle id="fxArcDownbeat" class="arc-downbeat" r="11" hidden/><g id="fxArcSparks"></g></svg>
+<div id="fxArcLabel" class="fxarc-label" hidden><span id="fxArcLabelText">FILTRO A · LP 40 %</span><span class="fxarc-bar"><i id="fxArcBarFill"></i></span></div>
+<div id="fxArcBeatTag" class="fxarc-beattag" hidden>tiempo 1 en 2 golpes · separa aquí</div>
+<div id="hmDeckCard" class="hm-deckcard" hidden><span class="badge" id="hmDeckBadge">A</span><span class="hm-deckmeta"><strong id="hmDeckTrack">Sin pista</strong><small id="hmDeckBpm">— BPM · estimado</small></span><span class="hm-beats" id="hmBeats" aria-label="Compás de 4 tiempos"><i></i><i></i><i></i><i></i></span></div>
+<div id="hmExitHint" class="hm-exithint" hidden>Saca las dos manos de la pantalla para volver a la consola</div>
+<div id="hmHandMsg" class="hm-handmsg" hidden>falta una mano</div>
+<div id="handModeBar" class="handmode-bar" hidden>
+  <span class="hm-titlewrap"><strong id="handModeTitle">MODO MANOS · FILTRO A</strong><span class="hm-help">Pinza con las dos manos · junta para cerrar · separa en el golpe · saca las manos para salir</span></span>
+  <span class="hm-toggles">
+    <label class="hm-toggle"><input type="checkbox" id="hmBeat" checked> Latido</label>
+    <label class="hm-toggle"><input type="checkbox" id="hmParticles"> Partículas</label>
+    <label class="hm-toggle"><input type="checkbox" id="hmHighpass"> Pasa-altos</label>
+  </span>
+  <label class="hm-slider">Sin manos: <input id="hmApertura" type="range" min="0" max="100" step="1" value="100" data-g="range" title="Apertura con el ratón"></label>
+  <button class="btn hm-exit" id="handModeExit">SALIR (Esc)</button>
+</div>
 <div id="demoGuide" class="picker" hidden>
   <div class="picker-head"><strong>Demo guiada (2 minutos)</strong><span class="grow"></span><button class="btn small" id="demoPrev">◀</button><button class="btn small" id="demoNext">Siguiente ▶</button><button class="btn" id="demoExit">Salir</button></div>
   <p id="demoStep" class="msg" style="font-size:16px"></p>
@@ -71,9 +88,11 @@
   <button class="btn small" id="pickerUp" title="Subir la pista elegida en el orden">▲ orden</button><button class="btn small" id="pickerDown" title="Bajar la pista elegida en el orden">▼ orden</button>
   <button class="btn small" id="pickerPrev">◀ página</button><button class="btn small" id="pickerNext">página ▶</button>
   <button class="btn" id="pickerClose">Volver (Esc)</button></div>
+  <div id="pickerPointing" class="picker-pointing">Sin mano sobre la lista: mueve la mano para apuntar a una pista</div>
   <div class="picker-body"><div id="pickerList" class="picker-list"></div>
   <input id="pickerRange" type="range" min="0" max="0" step="1" value="0" data-g="range" data-orient="v" aria-label="Deslizar por la lista"></div>
-  <p class="msg" id="pickerHint">Pinza o clic sobre una pista para cargarla en el deck. Si ese deck está sonando, mantén la pinza 1 s para reemplazar.</p>
+  <p class="msg" id="pickerHint">Pinza o clic sobre una pista para cargarla en el deck. Si ese deck está sonando, mantén la pinza 1 s para reemplazar. Dos palmas abiertas 1 s o el botón VOLVER cierran sin cargar nada.</p>
+  <div class="picker-foot"><label class="msg">Cierre sin manos <input id="pickerIdleSec" type="number" min="3" max="20" step="1" value="7" style="width:52px"> s</label><button class="btn picker-back" id="pickerBackBig">◀ VOLVER</button><span id="pickerCount" class="msg"></span></div>
 </div>
   </div>
 </main>
@@ -114,6 +133,9 @@
       <label>Opacidad de la mesa <input id="calOpacity" type="range" min="0.45" max="1" step="0.05" value="0.86"></label>
       <div class="row"><button class="btn small" id="btnLock">Bloquear mesa</button><button class="btn small" id="btnZoomMixer">Ampliar mixer</button><button class="btn small" id="btnReset">Restablecer todo</button></div>
       <label>Segundos por vuelta del jog (búsqueda) <input id="calJogSec" type="range" min="0.6" max="3.6" step="0.2" value="1.8"></label>
+      <label>Margen de salida del Modo manos: <span id="calHandExitVal">180</span> ms <input id="calHandExit" type="range" min="0" max="1000" step="20" value="180"></label>
+      <p class="msg">Salidas del Modo manos por sacar las manos (sesión): <span id="diagHandExits">0</span> · Coste del arco: <span id="diagArcMs">—</span></p>
+      <div class="row"><button class="btn small" id="btnTestArc" type="button">Probar arco</button><span class="msg">Dibuja el arco entre dos puntos fijos sin cámara (5 s).</span></div>
       <label><input type="checkbox" id="calSnap"> Imán a golpe al soltar la búsqueda con el jog</label>
       <p id="status" class="msg" role="status">Listo. Activa audio para empezar.</p>
       <p class="msg">Atajos: <kbd>Q</kbd>/<kbd>A</kbd> deck A · <kbd>P</kbd>/<kbd>L</kbd> deck B · <kbd>←</kbd><kbd>→</kbd> crossfader · <kbd>G</kbd> gestos · <kbd>C</kbd> garra</p>

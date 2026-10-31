@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MotionDJ · ECO agarrar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#07090c}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 810px; overflow: hidden; background: radial-gradient(ellipse 60% 70% at 50% 45%, #2a2f38 0%, #171b22 45%, #090b0f 100%); color: #e8edf2; font-family: Inter, system-ui, sans-serif;">
+
+  <div style="position: absolute; left: 50%; top: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 16px; padding: 12px 14px 12px 20px; border-radius: 14px; background: rgba(12,10,28,.9); border: 2px solid {{accentFx}}; box-shadow: 0 0 24px {{accentFx}}44; white-space: nowrap;">
+    <div style="display: flex; flex-direction: column; gap: 3px;">
+      <span style="font: 700 18px/1 'Barlow Condensed', sans-serif; letter-spacing: .12em;">MODO MANOS · ECO A</span>
+      <span style="font-size: 12px; color: #b9b3e6;">Cierra el puño · sube para más eco · abre y lanza hacia B</span>
+    </div>
+    <div style="display: flex; gap: 6px; padding-left: 12px; border-left: 1px solid #3b3760;">
+      <button type="button" aria-pressed="false" style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid #3b3760; background: transparent; color: #a9a3cf; font-size: 12px; font-weight: 600; cursor: pointer;">FILTRO · pinza</button>
+      <button type="button" aria-pressed="true" style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid {{accentFx}}; background: #221d44; color: #ffffff; font-size: 12px; font-weight: 700; cursor: pointer;">ECO · puño</button>
+    </div>
+    <button type="button" aria-pressed="true" style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid {{accentFx}}; background: #221d44; color: #e4defc; font-size: 12px; font-weight: 600; cursor: pointer;">● Latido</button>
+    <button type="button" style="height: 44px; padding: 0 20px; border-radius: 10px; border: 1px solid #5b5690; background: linear-gradient(180deg, #2b2752, #1a1736); color: #ffffff; font: 700 15px/1 'Barlow Condensed', sans-serif; letter-spacing: .14em; cursor: pointer;">SALIR (Esc)</button>
+  </div>
+
+  <div style="position: absolute; left: 150px; top: 170px; width: 46px; height: 470px; display: flex; flex-direction: column; align-items: center; gap: 8px;">
+    <span style="font-size: 11px; font-weight: 700; color: #cfc8ff; letter-spacing: .08em;">MÁS ECO</span>
+    <span style="position: relative; flex: 1 1 auto; width: 10px; border-radius: 5px; background: #1b2029; display: block;">
+      <span style="position: absolute; left: 0; right: 0; bottom: 0; height: 60%; border-radius: 5px; background: linear-gradient(0deg, {{accentA}}55, {{accentA}}); display: block;"></span>
+      <span style="position: absolute; left: -9px; bottom: 60%; width: 28px; height: 4px; margin-bottom: -2px; border-radius: 2px; background: #ffffff; box-shadow: 0 0 8px #ffffff; display: block;"></span>
+    </span>
+    <span style="font-size: 11px; font-weight: 700; color: #7d8794; letter-spacing: .08em;">MENOS</span>
+  </div>
+  <span style="position: absolute; left: 204px; top: 382px; font-size: 12px; color: #9aa6b2;">altura del puño = cantidad</span>
+
+  <svg width="1440" height="810" viewBox="0 0 1440 810" role="img" aria-label="Puño cerrado del lado del deck A con anillos de eco que laten al ritmo y una flecha que indica lanzar hacia el deck B" style="position: absolute; left: 0; top: 0;">
+    <defs>
+      <filter id="eblur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6"></feGaussianBlur></filter>
+      <marker id="arrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#e4defc"></path></marker>
+    </defs>
+    <circle cx="442" cy="458" r="78" fill="none" stroke="{{accentA}}" stroke-width="10" opacity="0.30" filter="url(#eblur)"></circle>
+    <circle cx="442" cy="458" r="78" fill="none" stroke="{{accentA}}" stroke-width="4" opacity="0.95"></circle>
+    <circle cx="442" cy="458" r="118" fill="none" stroke="{{accentA}}" stroke-width="3" opacity="0.6"></circle>
+    <circle cx="442" cy="458" r="160" fill="none" stroke="{{accentA}}" stroke-width="2" opacity="0.35"></circle>
+    <circle cx="442" cy="458" r="204" fill="none" stroke="{{accentA}}" stroke-width="1.5" opacity="0.18"></circle>
+    <path d="{{fistLines}}" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.92"></path>
+    <path d="{{fistDots}}" fill="{{accentA}}"></path>
+    <path d="M 560 430 C 760 330, 960 330, 1150 420" fill="none" stroke="#e4defc" stroke-width="3" stroke-dasharray="10 9" marker-end="url(#arrowHead)" opacity="0.85"></path>
+  </svg>
+
+  <div style="position: absolute; left: 330px; top: 218px; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 230px;">
+    <span style="padding: 6px 14px; border-radius: 14px; background: rgba(5,10,16,.85); border: 1px solid {{accentA}}88; font: 700 16px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; color: #e6faff; box-shadow: 0 0 14px {{accentA}}44; white-space: nowrap;">ECO A · ½ TIEMPO · 60 %</span>
+  </div>
+  <span style="position: absolute; left: 368px; top: 690px; padding: 5px 12px; border-radius: 12px; background: rgba(5,10,16,.85); border: 1px solid #3a434f; font-size: 13px; font-weight: 600; color: #e8edf2;">✊ puño cerrado · agarrando la canción</span>
+  <span style="position: absolute; left: 790px; top: 300px; padding: 6px 12px; border-radius: 12px; background: rgba(12,10,28,.88); border: 1px solid {{accentFx}}88; font-size: 13px; font-weight: 600; color: #e4defc; white-space: nowrap;">abre la mano de golpe y lanza hacia B →</span>
+  <span style="position: absolute; left: 1020px; top: 470px; padding: 5px 12px; border-radius: 12px; background: rgba(5,10,16,.8); border: 1px solid #3a434f; font-size: 12px; color: #9aa6b2; white-space: nowrap;">abrir despacio o bajar la mano = cancelar</span>
+
+  <div style="position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 9px 16px; border-radius: 12px; background: rgba(8,11,15,.86); border: 1px solid #facc1566; white-space: nowrap;">
+    <span style="font-size: 13px; font-weight: 600; color: #fde68a;">corte en el próximo tiempo 1 · en 2 golpes</span>
+    <div style="display: flex; gap: 6px;" aria-label="Compás: tiempo 3 de 4">
+      <span style="width: 12px; height: 12px; border-radius: 50%; border: 2px solid #facc15; box-sizing: border-box; display: block;"></span>
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #2a323c; display: block;"></span>
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: {{accentA}}; box-shadow: 0 0 10px {{accentA}}; display: block;"></span>
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #2a323c; display: block;"></span>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 24px; bottom: 22px; display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 12px; background: rgba(8,11,15,.86); border: 1px solid {{accentA}}66;">
+    <span style="width: 26px; height: 26px; border-radius: 7px; background: {{accentA}}; color: #061218; display: flex; align-items: center; justify-content: center; font: 700 16px/1 'Barlow Condensed', sans-serif;">A</span>
+    <div style="display: flex; flex-direction: column; gap: 3px;">
+      <span style="font-size: 13px; font-weight: 600;">Luciid — Hellfire · sonando</span>
+      <span style="font-size: 11px; color: #9aa6b2;">154,1 BPM · se cortará en el golpe y quedará la cola de eco</span>
+    </div>
+  </div>
+  <div style="position: absolute; right: 24px; bottom: 22px; display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 12px; background: rgba(8,11,15,.86); border: 1px solid {{accentB}}66;">
+    <div style="display: flex; flex-direction: column; gap: 3px; align-items: flex-end;">
+      <span style="font-size: 13px; font-weight: 600;">Triptykh — Bass Keeps Going · en pausa en CUE</span>
+      <span style="font-size: 11px; color: #9aa6b2;">tempo igualado a A (SYNC ✓) · entrará en el mismo golpe</span>
+    </div>
+    <span style="width: 26px; height: 26px; border-radius: 7px; background: {{accentB}}; color: #1a0610; display: flex; align-items: center; justify-content: center; font: 700 16px/1 'Barlow Condensed', sans-serif;">B</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accentA":{"editor":"color","default":"#22d3ee","options":["#22d3ee","#38bdf8","#2dd4bf"]},"accentB":{"editor":"color","default":"#ff4fa3","options":["#ff4fa3","#f472b6","#fb7185"]},"accentFx":{"editor":"color","default":"#9d8cff","options":["#9d8cff","#c4b5fd","#e2e8f0"]},"$preview":{"width":1440,"height":810}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const A = this.props.accentA ?? '#22d3ee';
+    const B = this.props.accentB ?? '#ff4fa3';
+    const F = this.props.accentFx ?? '#9d8cff';
+    const H = [[420,560],[455,530],[485,500],[500,470],[488,445],[450,440],[480,420],[488,450],[470,465],[425,435],[455,410],[465,440],[448,458],[400,440],[428,415],[438,445],[420,460],[380,455],[402,432],[412,458],[396,470]];
+    const C = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
+    const lines = C.map((c) => 'M ' + H[c[0]][0] + ' ' + H[c[0]][1] + ' L ' + H[c[1]][0] + ' ' + H[c[1]][1]).join(' ');
+    const dots = H.map((p) => 'M ' + (p[0] - 4) + ' ' + p[1] + ' a 4 4 0 1 0 8 0 a 4 4 0 1 0 -8 0').join(' ');
+    return { accentA: A, accentB: B, accentFx: F, fistLines: lines, fistDots: dots };
+  }
+}
+</script>
+</body>
+</html>

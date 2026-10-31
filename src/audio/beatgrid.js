@@ -75,24 +75,27 @@ export function analyzeBeatgrid(channelData, sampleRate) {
   let lagF = bestLag + shift;
   let bpm = 60 * fps / lagF;
   let confidence = Math.max(0, Math.min(1, y1));
-  // 3b) Criterio musical de octava (Etapa 13): en musica de baile un
-  // candidato <90 BPM cuyo doble cae en 90-180 y tiene soporte en la senal
-  // (autocorrelacion a mitad de periodo >= 50% de la elegida) es casi
-  // siempre el doble real con acento cada 2 golpes (medido: un sintetico a
-  // 132 con acento alterno se leia 66,0). Un 66 uniforme no tiene ese
-  // soporte a mitad de periodo y se queda en 66.
-  let octaveSupport = null;
-  const doubled = musicalOctave(bpm, lagF / 2 >= 1 ? corrAt(lagF / 2) / (y1 || 1) : 0);
-  if (doubled !== bpm) {
-    octaveSupport = corrAt(lagF / 2) / (y1 || 1);
+  // 3b) Criterio musical de octava (ampliado, Bloque 5): en musica de
+  // baile un candidato <90 BPM cuyo doble cae en 90-180 y tiene soporte
+  // en la senal es casi siempre el doble real con acento cada 2 golpes.
+  // Medido: lento uniforme support ~-0,01; doble real con golpe debil
+  // intermedio (0,12/0,16/0,20 de amplitud) support 0,23/0,30/0,38.
+  // Por eso el umbral baja de 0,50 a 0,22 (ver musicalOctave).
+  const supportBefore = lagF / 2 >= 1 ? corrAt(lagF / 2) / (y1 || 1) : 0;
+  const octaveSupport = bpm < 90 ? supportBefore : null;
+  const doubled = musicalOctave(bpm, supportBefore);
+  const wasDoubled = doubled !== bpm;
+  if (wasDoubled) {
     lagF /= 2; bpm = doubled;
     confidence = Math.max(0, Math.min(1, corrAt(lagF)));
   }
   // 4) Ambiguedad de octava: subdivision fuerte a doble velocidad.
   const halfScore = lagF / 2 >= 1 ? corrAt(lagF / 2) : 0;
-  // Ambigua si hay subdivision fuerte a doble velocidad o si el pico a
-  // mitad de velocidad era en realidad mas fuerte que el elegido.
-  const ambiguous = octaveSupport !== null ? octaveSupport < 0.75 : (y1 > 0 && (halfScore >= 0.72 * y1 || demotedSlowPeak));
+  // Ambigua si se doblo con soporte justito (<0,75), si no se doblo pero
+  // hay soporte moderado de posible mitad (>=0,15 con candidato <90), si
+  // hay subdivision fuerte o si el pico lento era mas fuerte que el elegido.
+  const ambiguous = wasDoubled ? (octaveSupport !== null && octaveSupport < 0.75)
+    : ((octaveSupport !== null && octaveSupport >= 0.15) || (y1 > 0 && (halfScore >= 0.72 * y1 || demotedSlowPeak)));
   // 5) Fase: plegar la envolvente sobre el periodo y buscar el maximo.
   let bestPhase = 0, bestScore = -Infinity;
   const phaseScores = new Float32Array(Math.ceil(lagF) + 1);
@@ -118,11 +121,13 @@ export function analyzeBeatgrid(channelData, sampleRate) {
 // Criterio musical de octava: support = autocorrelacion a mitad de periodo
 // dividida por la del periodo elegido. Solo dobla candidatos de baile.
 export function musicalOctave(bpm, support) {
-  // Umbral medido: 66 uniforme da support ~-0,01; 132 con acento alterno
-  // fuerte da ~0,54; con acento medio ~0,78.
+  // Umbrales medidos: lento uniforme ~-0,01; doble real con golpe debil
+  // intermedio 0,12/0,16/0,20/0,25 da 0,23/0,30/0,38/0,46; acento alterno
+  // fuerte ~0,54 y medio ~0,78. Umbral 0,22: dobla el doble real debil
+  // sin doblar el lento uniforme (margen amplio sobre -0,01).
   if (!bpm || bpm >= 90) return bpm;
   const d = bpm * 2;
-  return d >= 90 && d <= 180 && support >= 0.5 ? d : bpm;
+  return d >= 90 && d <= 180 && support >= 0.22 ? d : bpm;
 }
 export function beatPeriod(grid) { return grid?.bpm ? 60 / grid.bpm : null; }
 export function quantizeToBeat(time, grid) {

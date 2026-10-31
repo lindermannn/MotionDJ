@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MotionDJ · Vista DJ</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#07090c}
+a{color:#7dd3fc}a:hover{color:#bae6fd}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="min-height: 980px; width: 100%; box-sizing: border-box; background: #07090c; color: #e8edf2; font-family: Inter, system-ui, sans-serif; display: flex; flex-direction: column;">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 12px 22px; background: #0c1015; border-bottom: 1px solid #1d242d;">
+  <div style="display: flex; align-items: center; gap: 10px; flex: 0 0 auto;">
+    <div style="width: 38px; height: 38px; border-radius: 10px; background: #12171e; border: 1px solid #2a323d; display: flex; align-items: center; justify-content: center; font: 700 22px/1 'Barlow Condensed', sans-serif; color: {{accentA}}; box-shadow: inset 0 1px 0 rgba(255,255,255,.06);">M</div>
+    <div style="display: flex; flex-direction: column; gap: 2px;">
+      <span style="font: 700 18px/1 'Barlow Condensed', sans-serif; letter-spacing: .04em;">MOTIONDJ</span>
+      <span style="font-size: 11px; color: #8d99a6;">Control por manos · Web Audio · Local</span>
+    </div>
+  </div>
+  <div style="display: flex; padding: 3px; gap: 3px; background: #10141a; border: 1px solid #222a33; border-radius: 10px;">
+    <button type="button" style="height: 32px; padding: 0 16px; border-radius: 7px; border: 0; background: transparent; color: #9aa6b2; font-size: 13px; font-weight: 600; cursor: pointer;">Vista fácil</button>
+    <button type="button" aria-pressed="true" style="height: 32px; padding: 0 16px; border-radius: 7px; border: 0; background: #222a35; color: #ffffff; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: inset 0 -2px 0 {{accentA}};">Vista DJ</button>
+  </div>
+  <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+    <span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 14px; border: 1px solid #1f3a2b; background: #0e1a14; color: #86efac; font-size: 12px; font-weight: 500;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px #22c55e;"></span>Cámara activa</span>
+    <span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 14px; border: 1px solid #1f3a2b; background: #0e1a14; color: #86efac; font-size: 12px; font-weight: 500;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px #22c55e;"></span>Gestos activos</span>
+    <span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 14px; border: 1px solid #262e38; background: #10141a; color: #aab5c0; font-size: 12px;">Foco: LOW · A</span>
+  </div>
+  <div style="flex: 1 1 20px;"></div>
+  <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+    <button type="button" style="height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid #262e38; background: #12171d; color: #c9d3dc; font-size: 13px; cursor: pointer;">Encuadre: Recorte</button>
+    <button type="button" style="height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid #262e38; background: #12171d; color: #c9d3dc; font-size: 13px; cursor: pointer;">Espectro</button>
+    <button type="button" style="height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid #262e38; background: #12171d; color: #c9d3dc; font-size: 13px; cursor: pointer;">Diagnóstico</button>
+    <button type="button" style="height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid #262e38; background: #12171d; color: #c9d3dc; font-size: 13px; cursor: pointer;">Demo guiada</button>
+    <button type="button" style="height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid #4a1f25; background: #1a0f12; color: #fecaca; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 7px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: #ef4444;"></span>Grabar mezcla</button>
+  </div>
+</header>
+
+<main style="position: relative; flex: 1 1 auto; display: flex; flex-direction: column; padding: 18px 22px 22px; background: radial-gradient(ellipse 70% 60% at 50% 0%, #1a2330 0%, #0b0f14 55%, #07090c 100%);">
+  <div style="align-self: center; display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 16px; background: rgba(10,14,19,.7); border: 1px solid #212932; color: #9aa6b2; font-size: 12px;">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2"></rect></svg>
+    Vídeo de la cámara a pantalla completa detrás de la consola: tus manos se ven por encima
+  </div>
+  <div style="flex: 1 1 140px; min-height: 140px;"></div>
+
+  <section aria-label="Consola" style="display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; padding: 14px; border-radius: 22px; background: linear-gradient(180deg, rgba(22,27,34,.92), rgba(12,15,20,.94)); border: 1px solid #252d37; box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 30px 60px rgba(0,0,0,.55);">
+
+    <article aria-label="Deck A" style="flex: 1 1 430px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 16px; background: linear-gradient(180deg, #181d25, #11151b); border: 1px solid #262e39; box-shadow: inset 0 1px 0 rgba(255,255,255,.05);">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="width: 32px; height: 32px; border-radius: 8px; background: {{accentA}}; color: #061218; display: flex; align-items: center; justify-content: center; font: 700 20px/1 'Barlow Condensed', sans-serif;">A</span>
+        <div style="flex: 1 1 auto; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 3px;">
+          <span style="font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Luciid — Hellfire (Original Mix)</span>
+          <span style="font-size: 12px; color: #8d99a6;">Sonando · 6:00</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+          <span style="font: 700 22px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums;">154,1</span>
+          <span style="font-size: 10px; color: #8d99a6; letter-spacing: .06em;">BPM · ESTIMADO</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; padding-left: 12px; border-left: 1px solid #262e38;">
+          <span style="font: 600 18px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums;">2:22</span>
+          <span style="font-size: 11px; color: #8d99a6; font-variant-numeric: tabular-nums;">−3:38</span>
+        </div>
+      </div>
+
+      <div style="position: relative; height: 30px; display: flex; align-items: center; gap: 1px; padding: 0 4px; border-radius: 7px; background: #0b0e12; border: 1px solid #1f262f; overflow: hidden;">
+        <sc-for list="{{overA}}" as="b" hint-placeholder-count="110">
+          <span style="flex: 1 1 0; height: {{b.h}}px; border-radius: 1px; background: {{b.c}};"></span>
+        </sc-for>
+        <span style="position: absolute; top: 0; bottom: 0; left: 39%; width: 2px; background: #ffffff; box-shadow: 0 0 6px #ffffff;"></span>
+      </div>
+
+      <div style="position: relative; height: 70px; display: flex; align-items: center; gap: 2px; padding: 0 6px; border-radius: 9px; background: #090c10; border: 1px solid #1f262f; overflow: hidden;">
+        <sc-for list="{{zoomA}}" as="b" hint-placeholder-count="72">
+          <span style="flex: 1 1 0; height: {{b.h}}px; border-radius: 2px; background: {{b.c}};"></span>
+        </sc-for>
+        <sc-for list="{{beatsA}}" as="l" hint-placeholder-count="9">
+          <span style="position: absolute; top: 0; bottom: 0; left: {{l.left}}%; width: {{l.w}}px; background: {{l.c}};"></span>
+        </sc-for>
+        <span style="position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: #ffffff; box-shadow: 0 0 8px #ffffff;"></span>
+        <span style="position: absolute; top: 6px; left: 8px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,.55); font-size: 10px; color: #aab5c0;">8 s · rejilla estimada</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 96px minmax(0, 1fr) 66px; gap: 14px; align-items: stretch;">
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 12px;">
+          <button type="button" style="width: 88px; height: 38px; border-radius: 10px; border: 1.5px solid {{accentA}}; background: #0f1419; color: {{accentA}}; font: 700 14px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; cursor: pointer; box-shadow: 0 0 10px {{accentA}}33;">SYNC</button>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+            <button type="button" aria-label="CUE deck A" style="width: 74px; height: 74px; border-radius: 50%; border: 2px solid #3a434f; background: radial-gradient(circle at 50% 35%, #2b323c, #11151a 72%); box-shadow: 0 0 0 4px #0b0e12, inset 0 2px 3px rgba(255,255,255,.08); color: #f5b13d; font: 700 16px/1 'Barlow Condensed', sans-serif; letter-spacing: .08em; cursor: pointer;">CUE</button>
+            <button type="button" aria-label="Pausar deck A (sonando)" style="width: 88px; height: 88px; border-radius: 50%; border: 2px solid {{accentA}}; background: radial-gradient(circle at 50% 35%, #2b323c, #10141a 72%); box-shadow: 0 0 0 4px #0b0e12, 0 0 22px {{accentA}}66, inset 0 2px 3px rgba(255,255,255,.08); color: {{accentA}}; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+              <svg width="34" height="34" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5v14l9-7z" fill="currentColor"></path><rect x="14.5" y="5" width="2.6" height="14" rx="1" fill="currentColor"></rect><rect x="19" y="5" width="2.6" height="14" rx="1" fill="currentColor"></rect></svg>
+            </button>
+            <span style="font: 600 10px/1 'Barlow Condensed', sans-serif; letter-spacing: .12em; color: #8d99a6;">PLAY / PAUSA</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;">
+          <button type="button" aria-label="Jog del deck A: centro para buscar, borde para empujar" style="position: relative; width: 222px; height: 222px; border-radius: 50%; padding: 0; border: 0; cursor: pointer; background: #0c0f14; box-shadow: 0 0 0 3px {{accentA}}, 0 0 28px {{accentA}}40, inset 0 0 34px rgba(0,0,0,.85);">
+            <span style="position: absolute; inset: 7px; border-radius: 50%; border: 10px solid #161b22; box-shadow: inset 0 0 0 1px rgba(255,255,255,.05); display: block;"></span>
+            <span style="position: absolute; inset: 22px; border-radius: 50%; background: repeating-radial-gradient(circle at 50% 50%, #0f1317 0px, #0f1317 2px, #171c23 2px, #171c23 3px); display: block;"></span>
+            <span style="position: absolute; left: 50%; top: 24px; width: 4px; height: 22px; margin-left: -2px; border-radius: 2px; background: #ffffff; box-shadow: 0 0 8px #ffffff; transform-origin: 2px 87px; transform: rotate(38deg); display: block;"></span>
+            <span style="position: absolute; left: 50%; top: 50%; width: 92px; height: 92px; margin: -46px 0 0 -46px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #3a4350, #12161c 70%); box-shadow: 0 0 0 2px {{accentA}}77, 0 6px 14px rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; font: 700 28px/1 'Barlow Condensed', sans-serif; color: {{accentA}};">A</span>
+          </button>
+          <span style="font-size: 11px; color: #8d99a6;">centro: buscar con sonido · borde: empujar tempo</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+          <span style="font: 600 11px/1 'Barlow Condensed', sans-serif; letter-spacing: .12em; color: #aab5c0;">TEMPO</span>
+          <label style="position: relative; width: 56px; height: 214px; display: block; cursor: pointer;">
+            <input type="range" min="-8" max="8" step="0.1" value="0" aria-label="Tempo deck A" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: pointer;">
+            <span style="position: absolute; left: 50%; top: 8px; bottom: 8px; width: 6px; margin-left: -3px; border-radius: 3px; background: #06080b; border: 1px solid #2a323c; display: block;"></span>
+            <sc-for list="{{ticks}}" as="t" hint-placeholder-count="11">
+              <span style="position: absolute; left: 4px; top: {{t.top}}%; width: {{t.w}}px; height: 1px; background: {{t.c}}; display: block;"></span>
+            </sc-for>
+            <span style="position: absolute; right: 2px; top: 50%; margin-top: -6px; font-size: 10px; color: #8d99a6;">0</span>
+            <span style="position: absolute; left: 50%; top: 50%; width: 46px; height: 24px; margin: -12px 0 0 -23px; border-radius: 5px; background: linear-gradient(180deg, #4b5563, #2a313b); border: 1px solid #5b6674; box-shadow: 0 4px 8px rgba(0,0,0,.6); display: block;"><span style="position: absolute; left: 6px; right: 6px; top: 50%; height: 2px; margin-top: -1px; background: #ffffff; display: block;"></span></span>
+          </label>
+          <span style="font: 600 13px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums;">+0,0 %</span>
+          <span style="font-size: 10px; color: #8d99a6;">±8 %</span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 8px;">
+        <button type="button" style="flex: 1 1 0; height: 40px; border-radius: 9px; border: 1px solid #2c3540; background: #10151b; color: #d6dee6; font: 700 13px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; cursor: pointer;">LOOP 4</button>
+        <button type="button" style="flex: 1 1 0; height: 40px; border-radius: 9px; border: 1px solid {{accentFx}}66; background: #12111c; color: #d9d3ff; font: 700 13px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; cursor: pointer;">ECO · MANTÉN</button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;">
+        <sc-for list="{{padsA}}" as="p" hint-placeholder-count="8">
+          <button type="button" style="height: 54px; border-radius: 9px; border: 1.5px solid {{p.b}}; background: {{p.bg}}; box-shadow: {{p.glow}}; color: #dbe3ea; font: 700 12px/1.1 'Barlow Condensed', sans-serif; letter-spacing: .08em; cursor: pointer;">{{p.l}}</button>
+        </sc-for>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 10px; padding-top: 4px;">
+        <button type="button" style="height: 48px; padding: 0 16px; border-radius: 24px; border: 1px solid #2c3540; background: linear-gradient(180deg, #1b212a, #12171d); color: #e8edf2; display: inline-flex; align-items: center; gap: 9px; font: 700 14px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,.06);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h11"></path><path d="M3 11h11"></path><path d="M3 16h7"></path><path d="M17 17.5V6.5l4-1.2"></path><circle cx="15" cy="17.5" r="2.2"></circle></svg>PISTAS
+        </button>
+        <button type="button" aria-pressed="false" style="height: 48px; padding: 0 16px; border-radius: 24px; border: 1px solid #2c3540; background: linear-gradient(180deg, #1b212a, #12171d); color: #e8edf2; display: inline-flex; align-items: center; gap: 9px; font: 700 14px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,.06);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"></path><rect x="3" y="14" width="4.5" height="7" rx="1.6"></rect><rect x="16.5" y="14" width="4.5" height="7" rx="1.6"></rect></svg>PREESCUCHA
+        </button>
+        <div style="flex: 1 1 auto;"></div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+          <button type="button" aria-label="Efecto con las manos en el deck A" style="width: 92px; height: 92px; border-radius: 50%; border: 2px solid {{accentFx}}; background: radial-gradient(circle at 50% 35%, #2c2a3f, #12111b 72%); box-shadow: 0 0 0 5px #0b0e12, 0 0 0 6px {{accentFx}}44, 0 0 24px {{accentFx}}55, inset 0 2px 3px rgba(255,255,255,.08); color: {{accentFx}}; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12"></path><path d="M11 11.5V4a1.5 1.5 0 0 1 3 0v7.5"></path><path d="M14 11.5V5.5a1.5 1.5 0 0 1 3 0V13"></path><path d="M17 12.5V9a1.5 1.5 0 0 1 3 0v5c0 4-3 7-7 7h-1.5c-2.2 0-3.8-1-5-2.7L3.4 15a1.6 1.6 0 0 1 2.4-2l2.2 2"></path></svg>
+          </button>
+          <span style="font: 700 11px/1 'Barlow Condensed', sans-serif; letter-spacing: .16em; color: #cfc8ff;">MANOS · FX</span>
+        </div>
+      </div>
+    </article>
+
+    <article aria-label="Mezclador" style="flex: 0 1 390px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 16px; border-radius: 16px; background: linear-gradient(180deg, #161b22, #0f1318); border: 1px solid #262e39; box-shadow: inset 0 1px 0 rgba(255,255,255,.05);">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <span style="font: 700 12px/1 'Barlow Condensed', sans-serif; letter-spacing: .14em; color: {{accentA}};">CANAL A</span>
+        <span style="font: 700 14px/1 'Barlow Condensed', sans-serif; letter-spacing: .22em; color: #e8edf2;">MEZCLADOR</span>
+        <span style="font: 700 12px/1 'Barlow Condensed', sans-serif; letter-spacing: .14em; color: {{accentB}};">CANAL B</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr); gap: 8px; align-items: start;">
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 4px; justify-items: center;">
+          <sc-for list="{{chA}}" as="k" hint-placeholder-count="6">
+            <button type="button" aria-label="{{k.aria}}" style="display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 66px; min-height: 66px; padding: 4px; border: 0; background: none; color: inherit; cursor: pointer;">
+              <span style="position: relative; width: 54px; height: 54px; border-radius: 50%; background: {{k.ring}}; display: block;">
+                <span style="position: absolute; inset: 5px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #3b4451, #151a21 70%); box-shadow: inset 0 -2px 4px rgba(0,0,0,.6), 0 2px 5px rgba(0,0,0,.5); display: block;"></span>
+                <span style="position: absolute; left: 50%; top: 7px; width: 4px; height: 15px; margin-left: -2px; border-radius: 2px; background: #ffffff; box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 0 6px rgba(255,255,255,.5); transform-origin: 2px 20px; transform: rotate({{k.ang}}deg); display: block;"></span>
+              </span>
+              <span style="font: 700 11px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; color: #c5ced8;">{{k.label}}</span>
+              <span style="font-size: 10px; color: #8d99a6; font-variant-numeric: tabular-nums;">{{k.val}}</span>
+            </button>
+          </sc-for>
+        </div>
+
+        <div style="display: flex; justify-content: center; gap: 5px; padding-top: 10px;" aria-label="Medidores de nivel A y B">
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <sc-for list="{{meterA}}" as="m" hint-placeholder-count="14">
+              <span style="width: 12px; height: 10px; border-radius: 2px; background: {{m.c}}; opacity: {{m.op}}; display: block;"></span>
+            </sc-for>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <sc-for list="{{meterB}}" as="m" hint-placeholder-count="14">
+              <span style="width: 12px; height: 10px; border-radius: 2px; background: {{m.c}}; opacity: {{m.op}}; display: block;"></span>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 4px; justify-items: center;">
+          <sc-for list="{{chB}}" as="k" hint-placeholder-count="6">
+            <button type="button" aria-label="{{k.aria}}" style="display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 66px; min-height: 66px; padding: 4px; border: 0; background: none; color: inherit; cursor: pointer;">
+              <span style="position: relative; width: 54px; height: 54px; border-radius: 50%; background: {{k.ring}}; display: block;">
+                <span style="position: absolute; inset: 5px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #3b4451, #151a21 70%); box-shadow: inset 0 -2px 4px rgba(0,0,0,.6), 0 2px 5px rgba(0,0,0,.5); display: block;"></span>
+                <span style="position: absolute; left: 50%; top: 7px; width: 4px; height: 15px; margin-left: -2px; border-radius: 2px; background: #ffffff; box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 0 6px rgba(255,255,255,.5); transform-origin: 2px 20px; transform: rotate({{k.ang}}deg); display: block;"></span>
+              </span>
+              <span style="font: 700 11px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; color: #c5ced8;">{{k.label}}</span>
+              <span style="font-size: 10px; color: #8d99a6; font-variant-numeric: tabular-nums;">{{k.val}}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 10px; padding-top: 6px; border-top: 1px solid #222a33;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+          <span style="font: 700 11px/1 'Barlow Condensed', sans-serif; letter-spacing: .12em; color: #aab5c0;">VOL A</span>
+          <label style="position: relative; width: 56px; height: 150px; display: block; cursor: pointer;">
+            <input type="range" min="0" max="100" value="80" aria-label="Volumen canal A" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: pointer;">
+            <span style="position: absolute; left: 50%; top: 6px; bottom: 6px; width: 6px; margin-left: -3px; border-radius: 3px; background: #06080b; border: 1px solid #2a323c; display: block;"></span>
+            <span style="position: absolute; left: 50%; bottom: 6px; height: 74%; width: 6px; margin-left: -3px; border-radius: 3px; background: {{accentA}}88; display: block;"></span>
+            <span style="position: absolute; left: 50%; bottom: 74%; width: 44px; height: 24px; margin: 0 0 -12px -22px; border-radius: 5px; background: linear-gradient(180deg, #4b5563, #2a313b); border: 1px solid #5b6674; box-shadow: 0 4px 8px rgba(0,0,0,.6); display: block;"><span style="position: absolute; left: 6px; right: 6px; top: 50%; height: 2px; margin-top: -1px; background: #ffffff; display: block;"></span></span>
+          </label>
+          <span style="font-size: 10px; color: #8d99a6;">80 %</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding-bottom: 24px;">
+          <button type="button" aria-label="MASTER, 85 %" style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px; border: 0; background: none; color: inherit; cursor: pointer;">
+            <span style="position: relative; width: 66px; height: 66px; border-radius: 50%; background: {{master.ring}}; display: block;">
+              <span style="position: absolute; inset: 6px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #444e5c, #151a21 70%); box-shadow: inset 0 -2px 4px rgba(0,0,0,.6), 0 3px 7px rgba(0,0,0,.55); display: block;"></span>
+              <span style="position: absolute; left: 50%; top: 8px; width: 4px; height: 18px; margin-left: -2px; border-radius: 2px; background: #ffffff; box-shadow: 0 0 6px rgba(255,255,255,.6); transform-origin: 2px 25px; transform: rotate({{master.ang}}deg); display: block;"></span>
+            </span>
+            <span style="font: 700 12px/1 'Barlow Condensed', sans-serif; letter-spacing: .16em;">MASTER</span>
+            <span style="font-size: 10px; color: #8d99a6;">85 %</span>
+          </button>
+        </div>
+
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+          <span style="font: 700 11px/1 'Barlow Condensed', sans-serif; letter-spacing: .12em; color: #aab5c0;">VOL B</span>
+          <label style="position: relative; width: 56px; height: 150px; display: block; cursor: pointer;">
+            <input type="range" min="0" max="100" value="62" aria-label="Volumen canal B" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: pointer;">
+            <span style="position: absolute; left: 50%; top: 6px; bottom: 6px; width: 6px; margin-left: -3px; border-radius: 3px; background: #06080b; border: 1px solid #2a323c; display: block;"></span>
+            <span style="position: absolute; left: 50%; bottom: 6px; height: 58%; width: 6px; margin-left: -3px; border-radius: 3px; background: {{accentB}}88; display: block;"></span>
+            <span style="position: absolute; left: 50%; bottom: 58%; width: 44px; height: 24px; margin: 0 0 -12px -22px; border-radius: 5px; background: linear-gradient(180deg, #4b5563, #2a313b); border: 1px solid #5b6674; box-shadow: 0 4px 8px rgba(0,0,0,.6); display: block;"><span style="position: absolute; left: 6px; right: 6px; top: 50%; height: 2px; margin-top: -1px; background: #ffffff; display: block;"></span></span>
+          </label>
+          <span style="font-size: 10px; color: #8d99a6;">62 %</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid #222a33;">
+        <span style="align-self: center; font: 700 11px/1 'Barlow Condensed', sans-serif; letter-spacing: .16em; color: #aab5c0;">CROSSFADER</span>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font: 700 14px/1 'Barlow Condensed', sans-serif; color: {{accentA}};">A</span>
+          <label style="position: relative; flex: 1 1 auto; height: 48px; display: block; cursor: pointer;">
+            <input type="range" min="-1" max="1" step="0.01" value="0.15" aria-label="Crossfader A a B" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: pointer;">
+            <span style="position: absolute; left: 8px; right: 8px; top: 50%; height: 6px; margin-top: -3px; border-radius: 3px; background: linear-gradient(90deg, {{accentA}}99, #2a323c 45%, #2a323c 55%, {{accentB}}99); display: block;"></span>
+            <span style="position: absolute; left: 50%; top: 8px; bottom: 8px; width: 1px; background: #8d99a6; display: block;"></span>
+            <span style="position: absolute; left: 57%; top: 50%; width: 26px; height: 42px; margin: -21px 0 0 -13px; border-radius: 5px; background: linear-gradient(90deg, #4b5563, #2a313b); border: 1px solid #5b6674; box-shadow: 0 4px 8px rgba(0,0,0,.6); display: block;"><span style="position: absolute; top: 6px; bottom: 6px; left: 50%; width: 2px; margin-left: -1px; background: #ffffff; display: block;"></span></span>
+          </label>
+          <span style="font: 700 14px/1 'Barlow Condensed', sans-serif; color: {{accentB}};">B</span>
+        </div>
+      </div>
+
+      <details style="border-top: 1px solid #222a33; padding-top: 8px; color: #9aa6b2; font-size: 12px;">
+        <summary style="cursor: pointer;">Avanzado · reverb, guardarraíl de graves, calibración</summary>
+      </details>
+    </article>
+
+    <article aria-label="Deck B" style="flex: 1 1 430px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 16px; background: linear-gradient(180deg, #181d25, #11151b); border: 1px solid #262e39; box-shadow: inset 0 1px 0 rgba(255,255,255,.05);">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="width: 32px; height: 32px; border-radius: 8px; background: {{accentB}}; color: #1a0610; display: flex; align-items: center; justify-content: center; font: 700 20px/1 'Barlow Condensed', sans-serif;">B</span>
+        <div style="flex: 1 1 auto; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 3px;">
+          <span style="font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Triptykh — Bass Keeps Going</span>
+          <span style="font-size: 12px; color: #8d99a6;">Preparada · 5:15</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+          <span style="font: 700 22px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums;">152,0</span>
+          <span style="font-size: 10px; color: #8d99a6; letter-spacing: .06em;">BPM · ESTIMADO</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; padding-left: 12px; border-left: 1px solid #262e38;">
+          <span style="font: 600 18px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums;">0:47</span>
+          <span style="font-size: 11px; color: #8d99a6; font-variant-numeric: tabular-nums;">−4:28</span>
+        </div>
+      </div>
+
+      <div style="position: relative; height: 30px; display: flex; align-items: center; gap: 1px; padding: 0 4px; border-radius: 7px; background: #0b0e12; border: 1px solid #1f262f; overflow: hidden;">
+        <sc-for list="{{overB}}" as="b" hint-placeholder-count="110">
+          <span style="flex: 1 1 0; height: {{b.h}}px; border-radius: 1px; background: {{b.c}};"></span>
+        </sc-for>
+        <span style="position: absolute; top: 0; bottom: 0; left: 15%; width: 2px; background: #ffffff; box-shadow: 0 0 6px #ffffff;"></span>
+      </div>
+
+      <div style="position: relative; height: 70px; display: flex; align-items: center; gap: 2px; padding: 0 6px; border-radius: 9px; background: #090c10; border: 1px solid #1f262f; overflow: hidden;">
+        <sc-for list="{{zoomB}}" as="b" hint-placeholder-count="72">
+          <span style="flex: 1 1 0; height: {{b.h}}px; border-radius: 2px; background: {{b.c}};"></span>
+        </sc-for>
+        <sc-for list="{{beatsB}}" as="l" hint-placeholder-count="9">
+          <span style="position: absolute; top: 0; bottom: 0; left: {{l.left}}%; width: {{l.w}}px; background: {{l.c}};"></span>
+        </sc-for>
+        <span style="position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: #ffffff; box-shadow: 0 0 8px #ffffff;"></span>
+        <span style="position: absolute; top: 6px; right: 8px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,.55); font-size: 10px; color: #aab5c0;">8 s · rejilla estimada</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 66px minmax(0, 1fr) 96px; gap: 14px; align-items: stretch;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+          <span style="font: 600 11px/1 'Barlow Condensed', sans-serif; letter-spacing: .12em; color: #aab5c0;">TEMPO</span>
+          <label style="position: relative; width: 56px; height: 214px; display: block; cursor: pointer;">
+            <input type="range" min="-8" max="8" step="0.1" value="1.4" aria-label="Tempo deck B" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: pointer;">
+            <span style="position: absolute; left: 50%; top: 8px; bottom: 8px; width: 6px; margin-left: -3px; border-radius: 3px; background: #06080b; border: 1px solid #2a323c; display: block;"></span>
+            <sc-for list="{{ticks}}" as="t" hint-placeholder-count="11">
+              <span style="position: absolute; right: 4px; top: {{t.top}}%; width: {{t.w}}px; height: 1px; background: {{t.c}}; display: block;"></span>
+            </sc-for>
+            <span style="position: absolute; left: 2px; top: 50%; margin-top: -6px; font-size: 10px; color: #8d99a6;">0</span>
+            <span style="position: absolute; left: 50%; top: 45%; width: 46px; height: 24px; margin: -12px 0 0 -23px; border-radius: 5px; background: linear-gradient(180deg, #4b5563, #2a313b); border: 1px solid #5b6674; box-shadow: 0 4px 8px rgba(0,0,0,.6); display: block;"><span style="position: absolute; left: 6px; right: 6px; top: 50%; height: 2px; margin-top: -1px; background: #ffffff; display: block;"></span></span>
+          </label>
+          <span style="font: 600 13px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums;">+1,4 %</span>
+          <span style="font-size: 10px; color: #8d99a6;">±8 %</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;">
+          <button type="button" aria-label="Jog del deck B: centro para buscar, borde para empujar" style="position: relative; width: 222px; height: 222px; border-radius: 50%; padding: 0; border: 0; cursor: pointer; background: #0c0f14; box-shadow: 0 0 0 3px {{accentB}}, 0 0 28px {{accentB}}40, inset 0 0 34px rgba(0,0,0,.85);">
+            <span style="position: absolute; inset: 7px; border-radius: 50%; border: 10px solid #161b22; box-shadow: inset 0 0 0 1px rgba(255,255,255,.05); display: block;"></span>
+            <span style="position: absolute; inset: 22px; border-radius: 50%; background: repeating-radial-gradient(circle at 50% 50%, #0f1317 0px, #0f1317 2px, #171c23 2px, #171c23 3px); display: block;"></span>
+            <span style="position: absolute; left: 50%; top: 24px; width: 4px; height: 22px; margin-left: -2px; border-radius: 2px; background: #ffffff; box-shadow: 0 0 8px #ffffff; transform-origin: 2px 87px; transform: rotate(-64deg); display: block;"></span>
+            <span style="position: absolute; left: 50%; top: 50%; width: 92px; height: 92px; margin: -46px 0 0 -46px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #3a4350, #12161c 70%); box-shadow: 0 0 0 2px {{accentB}}77, 0 6px 14px rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; font: 700 28px/1 'Barlow Condensed', sans-serif; color: {{accentB}};">B</span>
+          </button>
+          <span style="font-size: 11px; color: #8d99a6;">centro: buscar con sonido · borde: empujar tempo</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 12px;">
+          <button type="button" style="width: 88px; height: 38px; border-radius: 10px; border: 1.5px solid #3a434f; background: #0f1419; color: #c9d3dc; font: 700 14px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; cursor: pointer;">SYNC</button>
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+            <button type="button" aria-label="CUE deck B" style="width: 74px; height: 74px; border-radius: 50%; border: 2px solid #3a434f; background: radial-gradient(circle at 50% 35%, #2b323c, #11151a 72%); box-shadow: 0 0 0 4px #0b0e12, inset 0 2px 3px rgba(255,255,255,.08); color: #f5b13d; font: 700 16px/1 'Barlow Condensed', sans-serif; letter-spacing: .08em; cursor: pointer;">CUE</button>
+            <button type="button" aria-label="Reproducir deck B (en pausa)" style="width: 88px; height: 88px; border-radius: 50%; border: 2px solid #3a434f; background: radial-gradient(circle at 50% 35%, #2b323c, #10141a 72%); box-shadow: 0 0 0 4px #0b0e12, inset 0 2px 3px rgba(255,255,255,.08); color: {{accentB}}; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+              <svg width="34" height="34" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5v14l9-7z" fill="currentColor"></path><rect x="14.5" y="5" width="2.6" height="14" rx="1" fill="currentColor"></rect><rect x="19" y="5" width="2.6" height="14" rx="1" fill="currentColor"></rect></svg>
+            </button>
+            <span style="font: 600 10px/1 'Barlow Condensed', sans-serif; letter-spacing: .12em; color: #8d99a6;">PLAY / PAUSA</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 8px;">
+        <button type="button" style="flex: 1 1 0; height: 40px; border-radius: 9px; border: 1px solid {{accentFx}}66; background: #12111c; color: #d9d3ff; font: 700 13px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; cursor: pointer;">ECO · MANTÉN</button>
+        <button type="button" style="flex: 1 1 0; height: 40px; border-radius: 9px; border: 1px solid #2c3540; background: #10151b; color: #d6dee6; font: 700 13px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; cursor: pointer;">LOOP 4</button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;">
+        <sc-for list="{{padsB}}" as="p" hint-placeholder-count="8">
+          <button type="button" style="height: 54px; border-radius: 9px; border: 1.5px solid {{p.b}}; background: {{p.bg}}; box-shadow: {{p.glow}}; color: #dbe3ea; font: 700 12px/1.1 'Barlow Condensed', sans-serif; letter-spacing: .08em; cursor: pointer;">{{p.l}}</button>
+        </sc-for>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 10px; padding-top: 4px;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+          <button type="button" aria-label="Efecto con las manos en el deck B" style="width: 92px; height: 92px; border-radius: 50%; border: 2px solid #3d3a5c; background: radial-gradient(circle at 50% 35%, #2a2838, #12111b 72%); box-shadow: 0 0 0 5px #0b0e12, inset 0 2px 3px rgba(255,255,255,.08); color: #b9b0f5; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12"></path><path d="M11 11.5V4a1.5 1.5 0 0 1 3 0v7.5"></path><path d="M14 11.5V5.5a1.5 1.5 0 0 1 3 0V13"></path><path d="M17 12.5V9a1.5 1.5 0 0 1 3 0v5c0 4-3 7-7 7h-1.5c-2.2 0-3.8-1-5-2.7L3.4 15a1.6 1.6 0 0 1 2.4-2l2.2 2"></path></svg>
+          </button>
+          <span style="font: 700 11px/1 'Barlow Condensed', sans-serif; letter-spacing: .16em; color: #b9b0f5;">MANOS · FX</span>
+        </div>
+        <div style="flex: 1 1 auto;"></div>
+        <button type="button" aria-pressed="true" style="height: 48px; padding: 0 16px; border-radius: 24px; border: 1px solid {{accentB}}; background: linear-gradient(180deg, #2a1622, #170d14); color: #ffd1e6; display: inline-flex; align-items: center; gap: 9px; font: 700 14px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; cursor: pointer; box-shadow: 0 0 14px {{accentB}}44, inset 0 1px 0 rgba(255,255,255,.06);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"></path><rect x="3" y="14" width="4.5" height="7" rx="1.6"></rect><rect x="16.5" y="14" width="4.5" height="7" rx="1.6"></rect></svg>PREESCUCHA
+        </button>
+        <button type="button" style="height: 48px; padding: 0 16px; border-radius: 24px; border: 1px solid #2c3540; background: linear-gradient(180deg, #1b212a, #12171d); color: #e8edf2; display: inline-flex; align-items: center; gap: 9px; font: 700 14px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,.06);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h11"></path><path d="M3 11h11"></path><path d="M3 16h7"></path><path d="M17 17.5V6.5l4-1.2"></path><circle cx="15" cy="17.5" r="2.2"></circle></svg>PISTAS
+        </button>
+      </div>
+    </article>
+  </section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accentA":{"editor":"color","default":"#22d3ee","options":["#22d3ee","#38bdf8","#2dd4bf"]},"accentB":{"editor":"color","default":"#ff4fa3","options":["#ff4fa3","#f472b6","#fb7185"]},"accentFx":{"editor":"color","default":"#9d8cff","options":["#9d8cff","#c4b5fd","#e2e8f0"]},"$preview":{"width":1440,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const A = this.props.accentA ?? '#22d3ee';
+    const B = this.props.accentB ?? '#ff4fa3';
+    const F = this.props.accentFx ?? '#9d8cff';
+    const rnd = (i, s) => { const x = Math.sin(i * 12.9898 + s * 78.233) * 43758.5453; return x - Math.floor(x); };
+    const over = (seed, played, c) => Array.from({ length: 110 }, (_, i) => {
+      const env = 0.35 + 0.65 * Math.abs(Math.sin(i / 110 * Math.PI * 3 + seed));
+      const h = Math.round(4 + env * (0.55 + 0.45 * rnd(i, seed)) * 22);
+      return { h: h, c: i / 110 < played ? c : '#3a4552' };
+    });
+    const zoom = (seed, c) => Array.from({ length: 72 }, (_, i) => {
+      const kick = i % 9 === 0;
+      const h = Math.round(kick ? 52 : 12 + rnd(i, seed) * 30);
+      return { h: h, c: i < 36 ? c : c + '88' };
+    });
+    const beats = (off) => {
+      const out = [];
+      for (let k = 0; k < 9; k++) {
+        const left = off + k * 12.5;
+        if (left > 99) break;
+        out.push({ left: left.toFixed(2), w: k % 4 === 0 ? 2 : 1, c: k % 4 === 0 ? 'rgba(255,255,255,.75)' : 'rgba(255,255,255,.26)' });
+      }
+      return out;
+    };
+    const ring = (frac, bip, c) => {
+      const ang = -135 + frac * 270;
+      let start, span;
+      if (bip) { start = ang < 0 ? 360 + ang : 0; span = Math.abs(ang); } else { start = 225; span = frac * 270; }
+      return { ang: ang.toFixed(1), ring: 'conic-gradient(from ' + start + 'deg, ' + c + ' 0deg ' + span + 'deg, transparent ' + span + 'deg 360deg), conic-gradient(from 225deg, #29313b 0deg 270deg, transparent 270deg 360deg)' };
+    };
+    const knobs = (c, list) => list.map((v) => Object.assign({ label: v[0], val: v[1], aria: v[0] + ', ' + v[1] }, ring(v[2], v[3], c)));
+    const meter = (lvl) => Array.from({ length: 14 }, (_, i) => {
+      const idx = 13 - i;
+      const c = idx >= 12 ? '#ef4444' : idx >= 9 ? '#f59e0b' : '#22c55e';
+      return { c: c, op: idx < lvl ? 1 : 0.14 };
+    });
+    const ticks = Array.from({ length: 11 }, (_, i) => ({ top: (4 + i * 9.2).toFixed(1), w: i === 5 ? 14 : 8, c: i === 5 ? '#e8edf2' : '#3d4754' }));
+    const pad = (l, kind, set) => {
+      const col = kind === 'cue' ? '#f5b13d' : kind === 'jump' ? '#cbd5e1' : kind === 'fx' ? F : '#34d399';
+      return { l: l, b: set ? col : col + '66', bg: set ? 'rgba(245,177,61,.14)' : '#0f1318', glow: set ? '0 0 16px rgba(245,177,61,.35), inset 0 0 10px rgba(245,177,61,.15)' : 'inset 0 1px 0 rgba(255,255,255,.04)' };
+    };
+    const padsFor = (cue1) => [
+      pad(cue1 ? 'CUE 1 · 0:42' : 'CUE 1', 'cue', cue1), pad('CUE 2', 'cue', false), pad('◀ SALTO', 'jump', false), pad('SALTO ▶', 'jump', false),
+      pad('FX FILTRO', 'fx', false), pad('FX ECO', 'fx', false), pad('SONIDO 1', 'snd', false), pad('SONIDO 2', 'snd', false)
+    ];
+    return {
+      accentA: A, accentB: B, accentFx: F,
+      overA: over(1.3, 0.39, A), overB: over(4.1, 0.15, B),
+      zoomA: zoom(2.2, A), zoomB: zoom(5.7, B),
+      beatsA: beats(3.5), beatsB: beats(9.0),
+      chA: knobs(A, [['HIGH', '0 dB', 0.8125, false], ['MID', '+2 dB', 0.875, false], ['LOW', '−8 dB', 0.5625, false], ['TRIM', '0 dB', 0.7, false], ['FILTRO', 'LP 35 %', 0.325, true], ['ECO', '20 %', 0.2, false]]),
+      chB: knobs(B, [['HIGH', '−3 dB', 0.72, false], ['MID', '0 dB', 0.8125, false], ['LOW', '0 dB', 0.8125, false], ['TRIM', '+1 dB', 0.75, false], ['FILTRO', 'Neutro', 0.5, true], ['ECO', '0 %', 0, false]]),
+      master: ring(0.85, false, '#e8edf2'),
+      meterA: meter(10), meterB: meter(4),
+      ticks: ticks,
+      padsA: padsFor(true), padsB: padsFor(false)
+    };
+  }
+}
+</script>
+</body>
+</html>

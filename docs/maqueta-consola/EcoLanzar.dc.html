@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MotionDJ · ECO lanzar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#07090c}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 810px; overflow: hidden; background: radial-gradient(ellipse 60% 70% at 50% 45%, #2a2f38 0%, #171b22 45%, #090b0f 100%); color: #e8edf2; font-family: Inter, system-ui, sans-serif;">
+
+  <div style="position: absolute; left: 50%; top: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 16px; padding: 12px 14px 12px 20px; border-radius: 14px; background: rgba(12,10,28,.9); border: 2px solid {{accentFx}}; box-shadow: 0 0 24px {{accentFx}}44; white-space: nowrap;">
+    <div style="display: flex; flex-direction: column; gap: 3px;">
+      <span style="font: 700 18px/1 'Barlow Condensed', sans-serif; letter-spacing: .12em;">MODO MANOS · ECO A</span>
+      <span style="font-size: 12px; color: #b9b3e6;">¡Lanzado! A se cortó en el golpe 1 y B entró en el mismo golpe</span>
+    </div>
+    <div style="display: flex; gap: 6px; padding-left: 12px; border-left: 1px solid #3b3760;">
+      <button type="button" aria-pressed="false" style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid #3b3760; background: transparent; color: #a9a3cf; font-size: 12px; font-weight: 600; cursor: pointer;">FILTRO · pinza</button>
+      <button type="button" aria-pressed="true" style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid {{accentFx}}; background: #221d44; color: #ffffff; font-size: 12px; font-weight: 700; cursor: pointer;">ECO · puño</button>
+    </div>
+    <button type="button" style="height: 44px; padding: 0 20px; border-radius: 10px; border: 1px solid #5b5690; background: linear-gradient(180deg, #2b2752, #1a1736); color: #ffffff; font: 700 15px/1 'Barlow Condensed', sans-serif; letter-spacing: .14em; cursor: pointer;">SALIR (Esc)</button>
+  </div>
+
+  <svg width="1440" height="810" viewBox="0 0 1440 810" role="img" aria-label="La mano se abre y lanza: los anillos de eco salen volando hacia el lado del deck B mientras B entra" style="position: absolute; left: 0; top: 0;">
+    <defs>
+      <filter id="lblur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6"></feGaussianBlur></filter>
+    </defs>
+    <circle cx="442" cy="458" r="60" fill="none" stroke="#ffffff" stroke-width="2" stroke-dasharray="6 8" opacity="0.25"></circle>
+    <path d="M 500 450 C 640 420, 760 430, 860 470" fill="none" stroke="#ffffff" stroke-width="2" stroke-dasharray="4 10" opacity="0.35"></path>
+    <path d="{{handLines}}" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.92"></path>
+    <path d="{{handDots}}" fill="{{accentA}}"></path>
+    <ellipse cx="1080" cy="440" rx="58" ry="66" fill="none" stroke="{{accentA}}" stroke-width="10" opacity="0.25" filter="url(#lblur)"></ellipse>
+    <ellipse cx="1080" cy="440" rx="58" ry="66" fill="none" stroke="{{accentA}}" stroke-width="4" opacity="0.8"></ellipse>
+    <ellipse cx="1180" cy="432" rx="44" ry="52" fill="none" stroke="{{accentA}}" stroke-width="3" opacity="0.55"></ellipse>
+    <ellipse cx="1262" cy="426" rx="32" ry="40" fill="none" stroke="{{accentA}}" stroke-width="2.5" opacity="0.35"></ellipse>
+    <ellipse cx="1328" cy="422" rx="22" ry="28" fill="none" stroke="{{accentA}}" stroke-width="2" opacity="0.2"></ellipse>
+    <circle cx="1390" cy="420" r="120" fill="{{accentB}}" opacity="0.10" filter="url(#lblur)"></circle>
+  </svg>
+
+  <span style="position: absolute; left: 790px; top: 640px; padding: 5px 12px; border-radius: 12px; background: rgba(5,10,16,.85); border: 1px solid #3a434f; font-size: 13px; font-weight: 600; white-space: nowrap;">✋ mano abierta de golpe hacia B = lanzar</span>
+  <span style="position: absolute; left: 1050px; top: 330px; padding: 5px 12px; border-radius: 12px; background: rgba(5,10,16,.85); border: 1px solid {{accentA}}88; font-size: 13px; font-weight: 600; color: #e6faff; white-space: nowrap;">cola de eco de A, al ritmo</span>
+
+  <div style="position: absolute; left: 50%; bottom: 104px; transform: translateX(-50%); display: flex; align-items: center; gap: 22px; padding: 12px 18px; border-radius: 14px; background: rgba(8,11,15,.88); border: 1px solid #252d37; white-space: nowrap;">
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <span style="font-size: 11px; font-weight: 700; color: #9aa6b2; letter-spacing: .08em;">COLA DE ECO</span>
+      <div style="display: flex; align-items: flex-end; gap: 4px; height: 28px;">
+        <span style="width: 10px; height: 28px; border-radius: 2px; background: {{accentA}}; display: block;"></span>
+        <span style="width: 10px; height: 22px; border-radius: 2px; background: {{accentA}}; opacity: .8; display: block;"></span>
+        <span style="width: 10px; height: 16px; border-radius: 2px; background: {{accentA}}; opacity: .6; display: block;"></span>
+        <span style="width: 10px; height: 11px; border-radius: 2px; background: {{accentA}}; opacity: .4; display: block;"></span>
+        <span style="width: 10px; height: 7px; border-radius: 2px; background: {{accentA}}; opacity: .25; display: block;"></span>
+        <span style="width: 10px; height: 4px; border-radius: 2px; background: {{accentA}}; opacity: .15; display: block;"></span>
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px; padding-left: 18px; border-left: 1px solid #252d37;">
+      <span style="font-size: 11px; font-weight: 700; color: #9aa6b2; letter-spacing: .08em;">CROSSFADER · pasa solo a B</span>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font: 700 13px/1 'Barlow Condensed', sans-serif; color: {{accentA}};">A</span>
+        <span style="position: relative; width: 200px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, {{accentA}}66, #2a323c 45%, #2a323c 55%, {{accentB}}); display: block;">
+          <span style="position: absolute; left: 92%; top: 50%; width: 14px; height: 26px; margin: -13px 0 0 -7px; border-radius: 4px; background: linear-gradient(90deg, #4b5563, #2a313b); border: 1px solid #5b6674; display: block;"></span>
+        </span>
+        <span style="font: 700 13px/1 'Barlow Condensed', sans-serif; color: {{accentB}};">B</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 24px; bottom: 22px; display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 12px; background: rgba(8,11,15,.86); border: 1px solid #2a323c; opacity: .75;">
+    <span style="width: 26px; height: 26px; border-radius: 7px; background: #2a323c; color: {{accentA}}; display: flex; align-items: center; justify-content: center; font: 700 16px/1 'Barlow Condensed', sans-serif;">A</span>
+    <div style="display: flex; flex-direction: column; gap: 3px;">
+      <span style="font-size: 13px; font-weight: 600;">Luciid — Hellfire · cortada en el golpe</span>
+      <span style="font-size: 11px; color: #9aa6b2;">solo suena la cola de eco · quedará en pausa al terminar</span>
+    </div>
+  </div>
+  <div style="position: absolute; right: 24px; bottom: 22px; display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 12px; background: rgba(26,10,20,.9); border: 2px solid {{accentB}}; box-shadow: 0 0 20px {{accentB}}55;">
+    <div style="display: flex; flex-direction: column; gap: 3px; align-items: flex-end;">
+      <span style="font-size: 13px; font-weight: 700;">Triptykh — Bass Keeps Going · SONANDO</span>
+      <span style="font-size: 11px; color: #ffd1e6;">entró en el mismo golpe · tempo igualado a A</span>
+    </div>
+    <span style="width: 26px; height: 26px; border-radius: 7px; background: {{accentB}}; color: #1a0610; display: flex; align-items: center; justify-content: center; font: 700 16px/1 'Barlow Condensed', sans-serif;">B</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accentA":{"editor":"color","default":"#22d3ee","options":["#22d3ee","#38bdf8","#2dd4bf"]},"accentB":{"editor":"color","default":"#ff4fa3","options":["#ff4fa3","#f472b6","#fb7185"]},"accentFx":{"editor":"color","default":"#9d8cff","options":["#9d8cff","#c4b5fd","#e2e8f0"]},"$preview":{"width":1440,"height":810}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const A = this.props.accentA ?? '#22d3ee';
+    const B = this.props.accentB ?? '#ff4fa3';
+    const F = this.props.accentFx ?? '#9d8cff';
+    const H = [[880,600],[925,570],[965,540],[995,510],[1020,485],[915,480],[925,430],[930,395],[935,365],[890,475],[893,420],[895,382],[897,350],[866,482],[862,430],[860,397],[858,370],[845,500],[835,460],[829,432],[825,410]];
+    const C = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
+    const lines = C.map((c) => 'M ' + H[c[0]][0] + ' ' + H[c[0]][1] + ' L ' + H[c[1]][0] + ' ' + H[c[1]][1]).join(' ');
+    const dots = H.map((p) => 'M ' + (p[0] - 4) + ' ' + p[1] + ' a 4 4 0 1 0 8 0 a 4 4 0 1 0 -8 0').join(' ');
+    return { accentA: A, accentB: B, accentFx: F, handLines: lines, handDots: dots };
+  }
+}
+</script>
+</body>
+</html>

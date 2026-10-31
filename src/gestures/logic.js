@@ -36,9 +36,10 @@ export class ControlRegistry {
   constructor() { this.controls = new Map(); this.grabs = new Map(); }
   register(id, rect, opts = {}) { this.controls.set(id, { id, rect, ...opts }); }
   unregister(id) { this.controls.delete(id); }
-  hit(x, y) {
+  hit(x, y, predicate = null) {
     let best = null;
     for (const c of this.controls.values()) {
+      if (predicate && !predicate(c)) continue;
       if (c.disabled) continue;
       const r = c.rect;
       if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {

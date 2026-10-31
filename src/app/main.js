@@ -6,8 +6,10 @@ import { PinchDetector, Smoother, ControlRegistry, pinchRatio, clamp, expandRect
 import { aperture01, ClawController, clawGate } from '../gestures/claw.js';
 import { transitionValues, expressiveValues, smooth } from '../audio/transition.js';
 import { evaluateAutoDj, autoDjTriggerKey } from '../audio/autodj.js';
-import { enqueue, removeFromQueue, takeNext, chooseTargetDeck } from '../audio/queue.js';
+import { enqueue, removeFromQueue, takeNext, chooseTargetDeck, pickerIdleState, pickerPointingText, pickerCountdownText } from '../audio/queue.js';
 import { FxSession, FX_PARAMS, fxCanAdjust } from '../audio/fx-twohand.js';
+import { fmtDb, fmtTrimDb, fmtPct, fmtTempo, fmtFilter, fmtEs, displayTrackName } from '../audio/format.js';
+import { aperturaToFilter, aperturaFromDistance, beatPhaseAt, onBeat, handModeShouldExit, pinchPoint, anchoredFilter, neutralRampValue, DoublePinchGate, bezierPoint, downbeatInfo, filterColor } from '../audio/handfx.js';
 
 const $ = s => document.querySelector(s);
 const stage = $('#stage'), video = $('#cam'), overlay = $('#overlay');
@@ -28,25 +30,34 @@ function padLabel(p) { return PAD_LABELS[p] || `PAD ${p + 1}`; }
 function deckHTML(d, i) {
   const col = i === 0 ? 'var(--a)' : 'var(--b)';
   d.el.innerHTML = `
-  <div class="deck-head"><span class="badge">${d.name}</span><h3><span class="tname">Sin pista</span></h3><span class="time bpm">BPM —</span></div>
+  <div class="deck-head"><span class="badge">${d.name}</span><h3><span class="tname">Sin pista</span></h3><span class="time pos">0:00</span><span class="time bpm">BPM —</span><span class="time rem">-0:00</span></div>
   <canvas class="wave" width="480" height="88"></canvas>
-  <canvas class="zoomwave" width="480" height="54" title="Onda ampliada: mira si las líneas gruesas caen sobre los bombos"></canvas>
-  <div class="row"><span class="time pos">0:00</span><span class="time bpm">BPM —</span><span class="grow"></span><label class="time zoomwrap-easy">Zoom <select class="zoomwin" title="Segundos visibles en la onda ampliada"><option value="4">4 s</option><option value="8" selected>8 s</option><option value="16">16 s</option></select></label><span class="time rem">-0:00</span></div>
-  <div class="gridrow"><span class="gridstate time">Sin rejilla</span></div>
-  <div class="deck-mid"><div class="jog" data-g="jog" title="Arrastra para scratch"><i></i></div><div class="transport">
-  <div class="rowb">
-    <button class="btn cue" data-act="cue" title="Marca o vuelve al punto CUE">CUE</button>
-    <button class="btn play" data-act="play" title="Reproducir / pausar">▶ PLAY</button>
-    <button class="btn" data-act="sync" title="Iguala el tempo con el otro deck y alinea golpes si la rejilla es fiable">SYNC</button>
+  <div class="zoomwrap"><canvas class="zoomwave" width="480" height="54" title="Onda ampliada: mira si las líneas gruesas caen sobre los bombos"></canvas><span class="zoomtag">rejilla estimada</span><select class="zoomwin" title="Segundos visibles en la onda ampliada"><option value="4">4 s</option><option value="8" selected>8 s</option><option value="16">16 s</option></select></div>
+  <span class="gridstate" hidden>Sin rejilla</span>
+  <div class="deck-main">
+    <div class="transport-col">
+      <button class="btn syncbtn" data-act="sync" title="Iguala el tempo con el otro deck y alinea golpes si la rejilla es fiable">SYNC</button>
+      <button class="btn round cue" data-act="cue" title="Marca o vuelve al punto CUE">CUE</button>
+      <button class="btn round play" data-act="play" title="Reproducir / pausar" aria-label="Reproducir o pausar, Deck ${d.name}"><span class="play-ico">▶</span></button>
+      <span class="round-label">PLAY / PAUSA</span>
+    </div>
+    <div class="jogcol">
+      <div class="jogwrap"><div class="jog" data-g="jog" title="Centro: buscar con sonido · borde: empujar el tempo"><i></i></div><span class="jog-letter">${d.name}</span></div>
+      <span class="jog-hint">centro: buscar con sonido · borde: empujar</span>
+    </div>
+    <div class="tempo-col dj-only"><span class="tempo-label">TEMPO</span><input class="tempo" type="range" min="-8" max="8" step="0.1" value="0" data-g="range" data-orient="v" data-deck="${i}" data-param="tempo" title="Velocidad de la pista. Centro = 0 % (retén)"><span class="tempoval">+0,0 %</span><span class="tempo-range">±8 %</span></div>
   </div>
-  <label>Tempo <span class="tempoval">+0.0%</span><input class="tempo" type="range" min="-8" max="8" step="0.1" value="0" data-g="range" data-deck="${i}" data-param="tempo" title="Velocidad de la pista. Centro = 0 % (retén)"></label>
   <div class="row">
     <button class="btn small loopbtn dj-only" data-act="loop" title="Repite 4 tiempos desde el golpe más cercano">LOOP 4</button>
-    <button class="btn small ecohold" title="Mantén pulsado: eco mientras lo sostienes; al soltar se apaga solo">ECO (mantén)</button></div></div>
-  </div>
-  <div class="pads">${Array.from({ length: 8 }, (_, p) => `<button class="pad" data-pad="${p}" title="${PAD_TITLES[p]}">${PAD_LABELS[p]}</button>`).join('')}</div>
+    <button class="btn small ecohold" title="Mantén pulsado: eco mientras lo sostienes; al soltar se apaga solo">ECO · MANTÉN</button></div>
+  <div class="pads">${Array.from({ length: 8 }, (_, p) => `<button class="pad fn-${['cue', 'cue', 'salto', 'salto', 'fx', 'fx', 'sonido', 'sonido'][p]}" data-pad="${p}" title="${PAD_TITLES[p]}">${PAD_LABELS[p]}</button>`).join('')}</div>
   <canvas class="deckspec" width="480" height="44" title="Espectro de este deck"></canvas>
-  <div class="row"><button class="btn small pistasbtn" title="Elige la siguiente pista a pantalla completa">PISTAS</button><button class="btn small cuephones" title="Preescucha en auriculares (experimental)">PREESCUCHA</button></div>`;
+  <div class="deck-foot">
+    <button class="btn pill pistasbtn" title="Elige la siguiente pista a pantalla completa"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h12M4 10h12M4 14h7"/><circle cx="17.5" cy="16.5" r="2.2"/><path d="M19.7 16.5V7l3-1v8.5"/></svg> PISTAS</button>
+    <button class="btn pill cuephones" title="Preescucha en auriculares (experimental)"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13a8 8 0 0 1 16 0"/><rect x="3" y="13" width="4" height="7" rx="1.6"/><rect x="17" y="13" width="4" height="7" rx="1.6"/></svg> PREESCUCHA</button>
+    <span class="grow"></span>
+    <span class="manos-wrap"><button class="btn manosfx" data-manos="${i}" title="Modo manos: efecto de filtro con las dos manos" aria-label="Modo manos, Deck ${d.name}"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11.5V6a1.5 1.5 0 0 1 3 0V4.8a1.5 1.5 0 0 1 3 0V6a1.5 1.5 0 0 1 3 0v1.2a1.5 1.5 0 0 1 3 0V13a7 7 0 0 1-7 7h-.6c-2.3 0-4-.9-5.3-2.7L3.6 14a1.6 1.6 0 0 1 2.6-1.7L7 13.5z"/></svg></button><span class="manos-label">MANOS · FX</span></span>
+  </div>`;
 }
 decks.forEach(deckHTML);
 $('#mixer').innerHTML = `
@@ -309,16 +320,194 @@ function toggleCue(i, btn) {
     ? `${cueStateText({ activeDeck: i, deviceName: cueChoice?.label })} (experimental). Se oye aunque su fader esté cerrado; la grabación no la incluye.`
     : cueStateText({});
 }
+// ---------- Modo manos: barrido de filtro a dos manos (Fase 2) ----------
+// Orden de control unico: mientras esta activo, la mesa no recibe pinzas
+// (ni FX a dos pinzas, ni transicion, ni garra). Al salir por cualquier via
+// el filtro del deck vuelve a Neutro (higiene de fin de sesion).
+const handMode = { active: false, deck: -1, apertura: 1, smooth: 1, filter: 0, lostSince: null, seenHands: false, beatEnv: 0, lastBeatIdx: -1, mouseControl: false, spark: 0, gate: new DoublePinchGate({ holdMs: 150 }), anchor: null, ramp: null, exitCount: 0, arcCostMs: null, testUntil: 0 };
+const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+// #fxArc es un <svg> (SVGElement): .hidden no quita el atributo. Usar atributos.
+function setSvgHidden(el, hidden) { if (!el) return; if (hidden) el.setAttribute('hidden', ''); else el.removeAttribute('hidden'); }
+function showFxArc(show) { setSvgHidden($('#fxArc'), !show); }
+function hmHighpass() { return !!$('#hmHighpass')?.checked; }
+function hmBeatOn() { return !!$('#hmBeat')?.checked && !reducedMotion; }
+function hmParticlesOn() { return !!$('#hmParticles')?.checked && !reducedMotion; }
+function handExitMarginMs() { const v = Number($('#calHandExit')?.value); return Number.isFinite(v) ? Math.min(1000, Math.max(0, v)) : 180; }
+try { const saved = Number(localStorage.getItem('motiondj-handexit-ms')); if (Number.isFinite(saved) && saved >= 0 && saved <= 1000 && $('#calHandExit')) { $('#calHandExit').value = saved; $('#calHandExitVal').textContent = saved; } } catch {}
+$('#calHandExit')?.addEventListener('input', e => { $('#calHandExitVal').textContent = e.target.value; try { localStorage.setItem('motiondj-handexit-ms', e.target.value); } catch {} });
+function hmFilterInput() { return document.querySelector(`input.knob-state[data-param="filter"][data-deck="${handMode.deck}"]`); }
+function hmSetFilter(v) {
+  handMode.filter = v;
+  const inp = hmFilterInput(); if (!inp) return;
+  inp.value = v; setParam(inp); syncAllKnobs();
+}
+function hmDeckCardUpdate() {
+  const d = decks[handMode.deck]; if (!d) return;
+  const badge = $('#hmDeckBadge'); if (badge) { badge.textContent = d.name; badge.style.background = handMode.deck === 1 ? 'var(--b)' : 'var(--a)'; }
+  const tr = $('#hmDeckTrack'); if (tr) tr.textContent = d.track ? displayTrackName(d.track.name) : 'Sin pista';
+  const bpmEl = $('#hmDeckBpm'); if (bpmEl) bpmEl.textContent = d.grid?.bpm ? `${fmtEs(d.grid.bpm, 1)} BPM · estimado · ${d.track ? fmt(engine?.decks[handMode.deck]?.position?.() || 0) : '0:00'}` : '— BPM · estimado';
+}
+// Entrada DIRECTA (sin dialogo ni consentimiento): pinza, clic o teclado entran al instante.
+function openHandModeIntro(i) { if (handMode.active) { exitHandMode('Modo manos cerrado.'); return; } handMode.deck = i; enterHandMode(); }
+function enterHandMode() {
+  handMode.active = true; handMode.lostSince = null; handMode.seenHands = false; handMode.mouseControl = false; handMode.ramp = null; handMode.anchor = null; handMode.gate.reset();
+  handMode.filter = Number(hmFilterInput()?.value || 0);
+  handMode.apertura = hmHighpass() ? (handMode.filter / 100 + 0.5) : ((handMode.filter + 50) / 50);
+  handMode.smooth = handMode.apertura;
+  if ($('#hmApertura')) $('#hmApertura').value = handMode.apertura * 100;
+  if (reducedMotion && $('#hmBeat')) $('#hmBeat').checked = false;
+  document.body.classList.add('handmode');
+  $('#handModeBar').hidden = false;
+  const dc = $('#hmDeckCard'); if (dc) dc.hidden = false;
+  const eh = $('#hmExitHint'); if (eh) eh.hidden = false;
+  showFxArc(true);
+  $('#handModeTitle').textContent = `MODO MANOS · FILTRO ${'AB'[handMode.deck]}`;
+  decks[handMode.deck].el.querySelector('[data-manos]')?.classList.add('manos-active');
+  registry.releaseAll(); endKnobDrag(); endAllScratches();
+  hmDeckCardUpdate();
+  status(`Modo manos en el deck ${'AB'[handMode.deck]}: pinza con las dos manos para mover el filtro; saca las dos manos para salir.`);
+  rebuildRegistry();
+}
+function exitHandMode(why, { byHands = false } = {}) {
+  if (!handMode.active) return;
+  handMode.active = false; handMode.anchor = null; handMode.ramp = null; handMode.gate.reset();
+  if (byHands) { handMode.exitCount++; const c = $('#diagHandExits'); if (c) c.textContent = handMode.exitCount; }
+  hmSetFilter(0); // higiene: filtro a Neutro al salir
+  document.body.classList.remove('handmode');
+  $('#handModeBar').hidden = true;
+  const dc = $('#hmDeckCard'); if (dc) dc.hidden = true;
+  const eh = $('#hmExitHint'); if (eh) eh.hidden = true;
+  const hm = $('#hmHandMsg'); if (hm) hm.hidden = true;
+  const lb = $('#fxArcLabel'); if (lb) lb.hidden = true;
+  const bt = $('#fxArcBeatTag'); if (bt) bt.hidden = true;
+  showFxArc(false);
+  document.querySelectorAll('[data-manos]').forEach(b => b.classList.remove('manos-active'));
+  if (why) status(why);
+  rebuildRegistry();
+}
+$('#handModeExit')?.addEventListener('click', () => exitHandMode('Modo manos cerrado: filtro de vuelta a Neutro.'));
+$('#btnTestArc')?.addEventListener('click', () => {
+  if (handMode.active) { status('Probar arco: ya estás en Modo manos.'); return; }
+  handMode.deck = handMode.deck >= 0 ? handMode.deck : 0; handMode.testUntil = performance.now() + 5000; showFxArc(true);
+  const lb = $('#fxArcLabel'); if (lb) lb.hidden = false;
+  status('Probar arco: arco fijo 5 s sin cámara. Comprueba que se ve sobre fondo claro y oscuro.');
+});
+function hmApplyMouse() { // sustituto sin camara: aplica al instante
+  if (!handMode.active) return;
+  handMode.smooth = handMode.apertura; handMode.ramp = null; handMode.anchor = null;
+  hmSetFilter(aperturaToFilter(handMode.smooth, { highpass: hmHighpass() }));
+}
+$('#hmApertura')?.addEventListener('input', e => { handMode.apertura = Number(e.target.value) / 100; handMode.mouseControl = true; hmApplyMouse(); });
+document.addEventListener('keydown', e => {
+  if (!handMode.active) return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { handMode.apertura = Math.min(1, handMode.apertura + 0.04); handMode.mouseControl = true; $('#hmApertura').value = handMode.apertura * 100; hmApplyMouse(); }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { handMode.apertura = Math.max(0, handMode.apertura - 0.04); handMode.mouseControl = true; $('#hmApertura').value = handMode.apertura * 100; hmApplyMouse(); }
+});
+// El arco (Bloque 4): entre los puntos de pinza, forma de onda real del
+// deck (AnalyserNode, dominio del tiempo) + ruido, contorno oscuro y
+// brillo para verse sobre fondo claro y oscuro, esqueleto de las manos
+// con el color del deck, marca al proximo tiempo 1 y etiqueta del valor.
+const HAND_LINKS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
+let arcWaveBuf = null;
+function drawHandsSkeleton(pts, pinchPts, col) {
+  const g = $('#fxArcHands'); if (!g) return;
+  let html = '';
+  (pts || []).forEach((p, hi) => {
+    if (!p?.lm) return;
+    const mapped = p.lm.map(lm => coverPoint(lm));
+    for (const [a, b] of HAND_LINKS) html += `<line x1="${mapped[a].x.toFixed(1)}" y1="${mapped[a].y.toFixed(1)}" x2="${mapped[b].x.toFixed(1)}" y2="${mapped[b].y.toFixed(1)}" stroke="${col}" stroke-width="3" stroke-linecap="round" opacity="0.9"/>`;
+    for (const m of mapped) html += `<circle cx="${m.x.toFixed(1)}" cy="${m.y.toFixed(1)}" r="4" fill="#fff" opacity="0.95"/>`;
+    const pp = pinchPts?.[hi];
+    if (pp) html += `<circle cx="${pp.x.toFixed(1)}" cy="${pp.y.toFixed(1)}" r="30" fill="none" stroke="${col}" stroke-width="2" opacity="0.25"/><circle cx="${pp.x.toFixed(1)}" cy="${pp.y.toFixed(1)}" r="17" fill="none" stroke="#fff" stroke-width="3" opacity="0.9"/>`;
+  });
+  g.innerHTML = html;
+}
+function drawHandArc(pts, now, { pinchPts = null, gateState = 'reposo' } = {}) {
+  const t0 = performance.now();
+  const svg = $('#fxArc'); const active = handMode.active || (handMode.testUntil && now < handMode.testUntil);
+  const ends = pinchPts || pts;
+  const deckCol = handMode.deck === 1 ? '#FF4FA3' : '#22D3EE';
+  drawHandsSkeleton(pts, pinchPts, deckCol);
+  if (!active || !ends?.[0] || !ends?.[1]) {
+    // Con una sola mano: sin arco (antes quedaba uno al 25% invisible).
+    if (svg) svg.style.opacity = 0;
+    const lb = $('#fxArcLabel'); if (lb) lb.hidden = true;
+    const bt = $('#fxArcBeatTag'); if (bt) bt.hidden = true;
+    const mk = $('#fxArcMarker'), db = $('#fxArcDownbeat'); if (mk) mk.setAttribute('hidden', ''); if (db) db.setAttribute('hidden', '');
+    return;
+  }
+  svg.style.opacity = gateState === 'agarrado' ? 1 : (gateState === 'congelado' ? 0.55 : 0.7);
+  const [p0, p1] = ends, mx = (p0.x + p1.x) / 2, my = (p0.y + p1.y) / 2;
+  const dx = p1.x - p0.x, dy = p1.y - p0.y, len = Math.max(1, Math.hypot(dx, dy));
+  const nx = -dy / len, ny = dx / len;
+  const j = reducedMotion ? 0 : Math.sin(now / 55) * Math.min(26, len * 0.08) * (0.5 + handMode.beatEnv * 0.7);
+  const ctrl = { x: mx + nx * j, y: my + ny * j };
+  // Onda real del deck en el dominio del tiempo (buffer reutilizado).
+  let wave = null;
+  const an = engine?.decks[handMode.deck]?.analyser;
+  if (an) { if (!arcWaveBuf || arcWaveBuf.length !== an.fftSize) arcWaveBuf = new Uint8Array(an.fftSize); an.getByteTimeDomainData(arcWaveBuf); wave = arcWaveBuf; }
+  const isDown = handMode._beat ? (((handMode._beat.index % 4) + 4) % 4 === 0) : false;
+  const amp = (13 + handMode.beatEnv * 9) * (isDown ? 1.35 : 1) * (reducedMotion ? 0.5 : 1);
+  const buildPath = (scale, seed) => {
+    const N = 48; let d = '';
+    for (let i = 0; i <= N; i++) {
+      const t = i / N, env = Math.sin(Math.PI * t), bp = bezierPoint(p0, ctrl, p1, t);
+      const wv = wave ? (wave[Math.floor(t * (wave.length - 1))] - 128) / 128 : Math.sin(t * 22 + seed) * 0.4;
+      const noise = reducedMotion ? 0 : (Math.sin(i * 12.9898 + seed * 78.233 + Math.floor(now / 80)) * 0.5);
+      const off = (wv * amp + noise * amp * 0.45) * env * scale;
+      d += `${i === 0 ? 'M' : 'L'} ${(bp.x + nx * off).toFixed(1)} ${(bp.y + ny * off).toFixed(1)} `;
+    }
+    return d;
+  };
+  const dMain = buildPath(1, 1.7), dSecond = buildPath(0.55, 4.3);
+  const col = filterColor(handMode.filter, hmHighpass());
+  const outline = $('#fxArcOutline'), glow = $('#fxArcGlow'), core = $('#fxArcCore'), second = $('#fxArcSecond');
+  if (outline) { outline.setAttribute('d', dMain); }
+  if (glow) { glow.setAttribute('d', dMain); glow.setAttribute('stroke', col); glow.style.opacity = reducedMotion ? 0.25 : 0.3 + handMode.beatEnv * 0.45; }
+  if (core) { core.setAttribute('d', dMain); core.setAttribute('stroke', col); core.style.opacity = 0.95; }
+  if (second) { second.setAttribute('d', dSecond); second.style.opacity = 0.85; }
+  // Etiqueta del valor real sobre el arco.
+  const label = $('#fxArcLabel'), ltext = $('#fxArcLabelText'), lfill = $('#fxArcBarFill');
+  if (label) {
+    label.hidden = false;
+    label.style.left = mx + 'px'; label.style.top = Math.max(76, my - 92) + 'px';
+    if (ltext) ltext.textContent = `FILTRO ${'AB'[handMode.deck]} � ${fmtFilter(handMode.filter)}`;
+    if (lfill) { const hp = hmHighpass(); const pct = hp ? (handMode.filter + 50) : (handMode.filter + 50) * 2; lfill.style.width = Math.min(100, Math.max(0, pct)) + '%'; lfill.style.background = col; }
+  }
+  // Marca que viaja al proximo tiempo 1 + anillo amarillo en su punto.
+  const info = downbeatInfo(handMode._beat);
+  const marker = $('#fxArcMarker'), down = $('#fxArcDownbeat'), tag = $('#fxArcBeatTag');
+  if (info && handMode._beat) {
+    const downPt = bezierPoint(p0, ctrl, p1, 0.82), mkPt = bezierPoint(p0, ctrl, p1, Math.min(0.82, info.progress * 0.82 + 0.02));
+    if (marker) { marker.removeAttribute('hidden'); marker.setAttribute('cx', mkPt.x); marker.setAttribute('cy', mkPt.y); }
+    if (down) { down.removeAttribute('hidden'); down.setAttribute('cx', downPt.x); down.setAttribute('cy', downPt.y); }
+    if (tag) { tag.hidden = false; tag.style.left = downPt.x + 'px'; tag.style.top = (downPt.y + 22) + 'px'; tag.textContent = `tiempo 1 en ${Math.max(1, info.beatsCount)} golpe${info.beatsCount === 1 ? '' : 's'} � separa aqu�`; }
+  } else {
+    if (marker) marker.setAttribute('hidden', ''); if (down) down.setAttribute('hidden', ''); if (tag) tag.hidden = true;
+  }
+  const sparks = $('#fxArcSparks');
+  if (hmParticlesOn() && handMode.spark > 0.02) {
+    let html = '';
+    for (let s = 0; s < 6; s++) {
+      const t = (s + 0.5) / 6, bp = bezierPoint(p0, ctrl, p1, t);
+      const off = Math.sin(now / 90 + s * 2.1) * 14 * handMode.spark;
+      html += `<circle cx="${bp.x + nx * off}" cy="${bp.y + ny * off}" r="${1.5 + handMode.spark * 2}" fill="${col}" opacity="${0.35 + handMode.spark * 0.5}"/>`;
+    }
+    sparks.innerHTML = html;
+  } else sparks.innerHTML = '';
+  handMode.arcCostMs = performance.now() - t0;
+  if ((drawHandArc._n = (drawHandArc._n || 0) + 1) % 30 === 0) { const el = $('#diagArcMs'); if (el) el.textContent = `${handMode.arcCostMs.toFixed(2)} ms/fotograma`; }
+}
 // ---------- Biblioteca ----------
 function renderLibrary() {
   const q = $('#search').value.toLowerCase(), ul = $('#trackList'); ul.innerHTML = '';
   library.filter(t => t.name.toLowerCase().includes(q)).forEach(t => {
     const li = document.createElement('li');
     if (selectedTrack === t) li.className = 'sel';
-    li.innerHTML = `<span>${t.name}${t.duration ? ` · ${fmt(t.duration)}` : ''}${t.metaBpm ? ` · ~${t.metaBpm.toFixed(0)} BPM` : ''}</span><span>${decks.map((d, i) => d.track === t ? `<span class="tagdeck">DECK ${'AB'[i]}</span>` : '').join('')} <button class="btn small" data-qadd title="Añadir a la cola">+ cola</button> <button class="btn small" data-qdel title="Quitar de la biblioteca">✕</button></span>`;
+    li.innerHTML = `<span>${displayTrackName(t.name)}${t.duration ? ` · ${fmt(t.duration)}` : ''}${t.metaBpm ? ` · ~${t.metaBpm.toFixed(0)} BPM` : ''}</span><span>${decks.map((d, i) => d.track === t ? `<span class="tagdeck">DECK ${'AB'[i]}</span>` : '').join('')} <button class="btn small" data-qadd title="Añadir a la cola">+ cola</button> <button class="btn small" data-qdel title="Quitar de la biblioteca">✕</button></span>`;
     li.onclick = () => { selectedTrack = t; renderLibrary(); };
-    li.querySelector('[data-qadd]').onclick = (e) => { e.stopPropagation(); playQueue = enqueue(playQueue, t); renderQueue(); $('#libMsg').textContent = `En cola: ${t.name}`; };
-    li.querySelector('[data-qdel]').onclick = (e) => { e.stopPropagation(); const ix = library.indexOf(t); if (ix >= 0) library.splice(ix, 1); playQueue = playQueue.filter(x => x !== t); if (selectedTrack === t) selectedTrack = null; renderLibrary(); renderQueue(); $('#libMsg').textContent = `Quitada de la biblioteca: ${t.name} (si sonaba en un deck, sigue hasta que cargues otra).`; };
+    li.querySelector('[data-qadd]').onclick = (e) => { e.stopPropagation(); playQueue = enqueue(playQueue, t); renderQueue(); $('#libMsg').textContent = `En cola: ${displayTrackName(t.name)}`; };
+    li.querySelector('[data-qdel]').onclick = (e) => { e.stopPropagation(); const ix = library.indexOf(t); if (ix >= 0) library.splice(ix, 1); playQueue = playQueue.filter(x => x !== t); if (selectedTrack === t) selectedTrack = null; renderLibrary(); renderQueue(); $('#libMsg').textContent = `Quitada de la biblioteca: ${displayTrackName(t.name)} (si sonaba en un deck, sigue hasta que cargues otra).`; };
     ul.appendChild(li);
   });
 }
@@ -390,13 +579,13 @@ async function loadToDeck(i, track = selectedTrack, skipConfirm = false) {
   d.loop = null; ch.clearLoop();
   d.el.querySelectorAll('.pad').forEach((b, p) => { b.classList.remove('set'); b.textContent = padLabel(p); });
   const lb = d.el.querySelector('.loopbtn'); if (lb) lb.textContent = 'LOOP 4';
-  const tempoInp = d.el.querySelector('.tempo'); if (tempoInp) { tempoInp.value = 0; d.el.querySelector('.tempoval').textContent = '+0.0%'; }
+  const tempoInp = d.el.querySelector('.tempo'); if (tempoInp) { tempoInp.value = 0; d.el.querySelector('.tempoval').textContent = fmtTempo(0); }
   ch.setRate(1);
   d.peaks = computePeaks(track.buffer);
   d.peaksZoom = computePeaks(track.buffer, 1440);
   d.grid = analyzeBeatgrid(track.buffer.getChannelData(0), track.buffer.sampleRate);
   d.bpm = d.grid?.bpm || null; d.taps = [];
-  d.el.querySelector('.tname').textContent = track.name;
+  const tn = d.el.querySelector('.tname'); tn.textContent = displayTrackName(track.name); tn.title = track.name;
   track.metaBpm = d.bpm;
   freeUnusedBuffers([track]);
   updateGridUI(d);
@@ -406,9 +595,9 @@ async function loadToDeck(i, track = selectedTrack, skipConfirm = false) {
 function updateGridUI(d) {
   // Solo lectura (Etapa 13): BPM estimado y estado de la rejilla, sin controles.
   const g = d.grid;
-  d.el.querySelectorAll('.bpm').forEach(el => { el.textContent = g?.bpm ? `BPM ~${g.bpm.toFixed(1)} (estimado)` : 'BPM —'; });
+  d.el.querySelectorAll('.bpm').forEach(el => { el.textContent = g?.bpm ? `BPM ~${fmtEs(g.bpm, 1)} (estimado${g.ambiguous && g.bpm < 90 ? ' · posible mitad' : ''})` : 'BPM —'; });
   const st = d.el.querySelector('.gridstate');
-  if (st) st.textContent = !g?.bpm ? 'Sin rejilla: este deck funciona sin SYNC de golpes ni eco al ritmo' : `Rejilla estimada · confianza ${g.confidence.toFixed(2)}${g.ambiguous ? ' · tempo dudoso entre dos octavas' : ''} · mira la onda ampliada`;
+  if (st) st.textContent = !g?.bpm ? 'Sin rejilla: este deck funciona sin SYNC de golpes ni eco al ritmo' : `Rejilla estimada · confianza ${g.confidence.toFixed(2)}${g.ambiguous ? (g.bpm < 90 ? ' · estimado · posible mitad' : ' · tempo dudoso entre dos octavas') : ''} · mira la onda ampliada`;
   drawWave(d);
   refreshEcoTimes();
 }
@@ -436,7 +625,7 @@ function setParam(input) {
   if (p === 'delay') return engine.decks.forEach(d => d.delaySend.gain.setTargetAtTime(v, t, 0.05));
   if (p === 'verb') return engine.decks.forEach(d => d.verbSend.gain.setTargetAtTime(v, t, 0.05));
   if (!ch) return;
-  if (p === 'tempo') { const bpm = decks[i].bpm || 120; ch.setRate(bpm ? (1 + v / 100) : 1); decks[i].el.querySelector('.tempoval').textContent = `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`; refreshEcoTimes(); }
+  if (p === 'tempo') { const bpm = decks[i].bpm || 120; ch.setRate(bpm ? (1 + v / 100) : 1); decks[i].el.querySelector('.tempoval').textContent = fmtTempo(v); refreshEcoTimes(); }
   if (p === 'vol') ch.fader.gain.setTargetAtTime(v, t, 0.03);
   if (p === 'trim') ch.trim.gain.setTargetAtTime(v, t, 0.03);
   if (p === 'low') ch.low.gain.setTargetAtTime(v, t, 0.03);
@@ -516,7 +705,7 @@ function renderQueue() {
   ul.innerHTML = '';
   playQueue.forEach((t, ix) => {
     const li = document.createElement('li');
-    li.innerHTML = `<span>${ix + 1}. ${t.name}</span><button class="btn small">✕</button>`;
+    li.innerHTML = `<span>${ix + 1}. ${displayTrackName(t.name)}</span><button class="btn small">✕</button>`;
     li.querySelector('button').onclick = () => { playQueue = removeFromQueue(playQueue, ix); renderQueue(); };
     ul.appendChild(li);
   });
@@ -530,7 +719,7 @@ function nextInQueue(manual = true) {
   if (!taken.track) { if (manual) status('La cola está vacía. Añade pistas con «+ cola».'); return false; }
   playQueue = taken.queue; renderQueue();
   loadToDeck(target, taken.track);
-  status(`Siguiente: «${taken.track.name}» cargada en el deck ${decks[target].name} (no suena hasta PLAY o Auto DJ).`);
+  status(`Siguiente: «${displayTrackName(taken.track.name)}» cargada en el deck ${decks[target].name} (no suena hasta PLAY o Auto DJ).`);
   return true;
 }
 // ---------- Demo guiada y guardarraíl de graves (P4) ----------
@@ -555,16 +744,23 @@ function checkBassWarn() {
   bw.style.visibility = bassClash(low(0), low(1), Number($('#cross')?.value || 0)) ? 'visible' : 'hidden';
 }
 // ---------- Selector PISTAS a pantalla completa (P3.5.b) ----------
-const picker = { deck: 0, start: 0, pageSize: 7, selectedId: null, holdTimer: null };
+const picker = { deck: 0, start: 0, pageSize: 7, selectedId: null, holdTimer: null, lastActivityAt: 0, gestureHold: null, palmsSince: null };
 function saveOrder() { try { localStorage.setItem('motiondj-order', JSON.stringify(library.map(t => t.name))); } catch {} }
 function applySavedOrder() { try { const ord = JSON.parse(localStorage.getItem('motiondj-order') || '[]'); library.sort((a, b) => { const ia = ord.indexOf(a.name), ib = ord.indexOf(b.name); return (ia < 0 ? 9999 : ia) - (ib < 0 ? 9999 : ib); }); } catch {} }
 function openTrackPicker(i) {
   picker.deck = i; picker.start = 0; picker.selectedId = null;
-  $('#trackPicker').hidden = false;
+  picker.lastActivityAt = performance.now(); picker.gestureHold = null; picker.palmsSince = null;
+  $('#trackPicker').hidden = false; document.body.classList.add('picker-open');
   $('#pickerTitle').textContent = `Elegir pista para el deck ${'AB'[i]}`;
   renderPicker(); rebuildRegistry();
 }
-function closeTrackPicker() { $('#trackPicker').hidden = true; if (picker.holdTimer) { clearTimeout(picker.holdTimer); picker.holdTimer = null; } rebuildRegistry(); }
+function closeTrackPicker(why = '') {
+  $('#trackPicker').hidden = true; document.body.classList.remove('picker-open');
+  if (picker.holdTimer) { clearTimeout(picker.holdTimer); picker.holdTimer = null; }
+  picker.gestureHold = null; picker.palmsSince = null;
+  if (why) status(why);
+  rebuildRegistry();
+}
 function renderPicker() {
   const list = $('#pickerList'); if (!list) return;
   const total = library.length;
@@ -573,7 +769,8 @@ function renderPicker() {
   library.slice(picker.start, picker.start + picker.pageSize).forEach((t, off) => {
     const ix = picker.start + off, b = document.createElement('button');
     b.className = 'pickcard' + (picker.selectedId === t.id ? ' sel' : '');
-    b.innerHTML = `<span class="num">${ix + 1}</span><span>${t.name}${t.duration ? ` · ${fmt(t.duration)}` : ''}${t.metaBpm ? ` · ~${t.metaBpm.toFixed(0)} BPM` : ''}</span>${decks.map((d, di) => d.track === t ? `<span class="tagdeck">${'AB'[di]}${engine?.decks[di].playing ? ' (sonando)' : ''}</span>` : '').join('')}`;
+    b.dataset.trackId = t.id;
+    b.innerHTML = `<span class="num">${ix + 1}</span><span>${displayTrackName(t.name)}${t.duration ? ` · ${fmt(t.duration)}` : ''}${t.metaBpm ? ` · ~${t.metaBpm.toFixed(0)} BPM` : ''}</span>${decks.map((d, di) => d.track === t ? `<span class="tagdeck">${'AB'[di]}${engine?.decks[di].playing ? ' (sonando)' : ''}</span>` : '').join('')}<span class="holdbar"><i></i></span>`; b.title = t.name;
     const choose = async () => {
       picker.selectedId = t.id;
       const ok = await loadToDeck(picker.deck, t, engine?.decks[picker.deck].playing);
@@ -600,7 +797,10 @@ function renderPickerSel() { document.querySelectorAll('.pickcard').forEach((c, 
 $('#pickerRange')?.addEventListener('input', e => { picker.start = Number(e.target.value); renderPicker(); });
 $('#pickerPrev').onclick = () => { picker.start -= picker.pageSize; renderPicker(); };
 $('#pickerNext').onclick = () => { picker.start += picker.pageSize; renderPicker(); };
-$('#pickerClose').onclick = closeTrackPicker;
+$('#pickerClose').onclick = () => closeTrackPicker();
+$('#pickerBackBig')?.addEventListener('click', () => closeTrackPicker('Selector cerrado: no se cargó ninguna pista.'));
+$('#trackPicker')?.addEventListener('pointermove', () => { picker.lastActivityAt = performance.now(); });
+$('#trackPicker')?.addEventListener('pointerdown', () => { picker.lastActivityAt = performance.now(); });
 function moveSelected(dir) {
   const ix = library.findIndex(t => t.id === picker.selectedId);
   if (ix < 0) { $('#pickerHint').textContent = 'Primero toca una pista para elegirla y luego muévela con ▲/▼ orden.'; return; }
@@ -654,6 +854,7 @@ $('#btnEasyMix')?.addEventListener('click', () => {
 decks.forEach((d, i) => {
   d.el.addEventListener('click', e => {
     const act = e.target.dataset?.act, pad = e.target.dataset?.pad;
+    if (e.target.closest?.('[data-manos]')) { openHandModeIntro(i); return; }
     if (e.target.classList.contains('cuephones')) { toggleCue(i, e.target); return; }
     if (e.target.classList.contains('pistasbtn')) { openTrackPicker(i); return; }
     if (act) deckAction(i, act, e.target);
@@ -711,7 +912,7 @@ decks.forEach((d, i) => {
 function refreshTransport() {
   decks.forEach((d, i) => {
     const playing = engine?.decks[i].playing;
-    const b = d.el.querySelector('.play'); b.textContent = playing ? '❚❚ PAUSE' : '▶ PLAY'; b.classList.toggle('play-on', !!playing);
+    const b = d.el.querySelector('.play'); const ico = b.querySelector('.play-ico'); if (ico) ico.textContent = playing ? '❚❚' : '▶'; b.classList.toggle('play-on', !!playing); b.setAttribute('aria-label', `${playing ? 'Pausar' : 'Reproducir'}, Deck ${d.name}`);
     d.el.querySelector('.jog').classList.toggle('spin', !!playing);
   });
 }
@@ -752,7 +953,7 @@ function resetAll() {
     inp.value = RESET_DEFAULTS.params[p];
     inp.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  decks.forEach(d => { const tv = d.el.querySelector('.tempoval'); if (tv) tv.textContent = '+0.0%'; });
+  decks.forEach(d => { const tv = d.el.querySelector('.tempoval'); if (tv) tv.textContent = fmtTempo(0); });
   syncAllKnobs(); fitConsole();
   status('Restablecido: calibración y mezclador a valores de fábrica. Las pistas y la música no se tocaron.');
 }
@@ -944,7 +1145,7 @@ function rebuildRegistry() {
   registry.controls.clear();
   const pad = Number($('#calHit')?.value || 16), sr = stage.getBoundingClientRect();
   // TODOS los controles de la mesa: sliders, botones (PLAY/CUE/SYNC/LOOP/pads/modo) y onda.
-  document.querySelectorAll('.console [data-g], .console button, .console .wave, #fxPalette [data-fx-card], #trackPicker .pickcard, #trackPicker [data-g]').forEach((el, idx) => {
+  document.querySelectorAll('.console [data-g], .console button, .console .wave, #fxPalette [data-fx-card], #trackPicker .pickcard, #trackPicker [data-g], #trackPicker button').forEach((el, idx) => {
     const r = el.getBoundingClientRect();
     if (!r.width) return;
     if (!el._gid) el._gid = `ctl-${idx}-${el.dataset.param || el.dataset.act || el.className}`;
@@ -990,41 +1191,33 @@ function setRangeFromPoint(el, x, y) {
   el.dispatchEvent(new Event('input', { bubbles: true }));
 }
 // ---------- Perilla piloto (LOW deck A): arrastre relativo anclado ----------
-const knobDrags = new Map(); let knobBarTimer = null;
+const knobDrags = new Map();
 function knobInput(knob) { return knob?.closest('.knobwrap')?.querySelector('.knob-state') || null; }
 function knobPx() { return Number($('#calKnob')?.value || 220); }
 function fmtKnobVal(inp, v) {
-  if (inp.dataset.display === 'pct') return inp.dataset.param === 'trim' ? `${Math.round(v * 100)}%` : `${Math.round(v / (Number(inp.max) || 1) * 100)}%`;
-  if (inp.dataset.unit === 'dB') return `${v > 0 ? '+' : ''}${v} dB`;
-  return `${Math.round(v)}`;
+  const p = inp.dataset.param;
+  if (p === 'trim') return fmtTrimDb(v); // ganancia real en dB
+  if (p === 'filter') return fmtFilter(v); // Neutro / LP nn % / HP nn %
+  if (inp.dataset.display === 'pct') return fmtPct(v / (Number(inp.max) || 1) * 100);
+  if (inp.dataset.unit === 'dB') return fmtDb(v);
+  return fmtEs(v, 0);
 }
 function syncKnob(knob) {
   const inp = knobInput(knob); if (!inp) return;
   const v = Number(inp.value), mn = Number(inp.min), mx = Number(inp.max), f = mx > mn ? (v - mn) / (mx - mn) : 0;
   knob.style.setProperty('--ang', knobAngle(v, mn, mx) + 'deg');
   knob.style.setProperty('--frac', f);
-  const kv = knob.closest('.knobwrap')?.querySelector('.knobval'); if (kv) kv.textContent = fmtKnobVal(inp, v);
-  if ([...knobDrags.values()].some(d => d.knob === knob)) showKnobBar(inp, knob, true);
+  const kv = knob.closest('.knobwrap')?.querySelector('.knobval');
+  if (kv) { kv.textContent = fmtKnobVal(inp, v); kv.classList.toggle('active', [...knobDrags.values()].some(d => d.knob === knob) || document.activeElement === knob); }
 }
 function syncAllKnobs() { document.querySelectorAll('.knob').forEach(syncKnob); }
-function showKnobBar(inp, knob, keep) {
-  const bar = $('#knobBar'); bar.hidden = false;
-  const v = Number(inp.value), mn = Number(inp.min), mx = Number(inp.max), f = mx > mn ? (v - mn) / (mx - mn) : 0;
-  $('#knobBarLabel').textContent = inp.dataset.param === 'master' ? 'MASTER' : `${(inp.dataset.param || '').toUpperCase()} · DECK ${'AB'[Number(inp.dataset.deck || 0)]}`;
-  $('#knobBarVal').textContent = inp.dataset.display === 'pct' ? `${Math.round(v * 100)}%` : (inp.dataset.unit === 'dB' ? `${v > 0 ? '+' : ''}${v} dB` : `${v}`);
-  $('#knobBarFill').style.width = `${f * 100}%`;
-  $('#knobBarDot').style.left = `${f * 100}%`;
-  bar.style.borderColor = Number(inp.dataset.deck) === 1 ? 'var(--b)' : 'var(--a)';
-  if (!keep && knobBarTimer) { clearTimeout(knobBarTimer); knobBarTimer = null; }
-}
-function hideKnobBarSoon() {
-  if (knobBarTimer) clearTimeout(knobBarTimer);
-  knobBarTimer = setTimeout(() => { if (!knobDrags.size) $('#knobBar').hidden = true; knobBarTimer = null; }, 700);
-}
+syncAllKnobs(); // valores bajo cada perilla visibles desde el arranque
+// Sin barra flotante de valor: la unica lectura es la de debajo de la
+// perilla, que se resalta mientras se arrastra o tiene el foco.
 function startKnobDrag(knob, x, hand) {
   const inp = knobInput(knob); if (!inp) return false;
   knobDrags.set(hand, { knob, input: inp, hand, startValue: Number(inp.value), startX: x });
-  showKnobBar(inp, knob);
+  syncKnob(knob);
   return true;
 }
 function moveKnobDrag(hand, x) {
@@ -1035,9 +1228,10 @@ function moveKnobDrag(hand, x) {
   syncKnob(drag.knob);
 }
 function endKnobDrag(hand) {
+  const gone = hand !== undefined ? [knobDrags.get(hand)] : [...knobDrags.values()];
   if (hand !== undefined) knobDrags.delete(hand); else knobDrags.clear();
-  if (!knobDrags.size) hideKnobBarSoon();
-  else { const last = [...knobDrags.values()].at(-1); if (last) showKnobBar(last.input, last.knob, true); }
+  gone.forEach(d => { if (d?.knob) syncKnob(d.knob); });
+  syncAllKnobs();
 }
 function endAllKnobs() { endKnobDrag(); }
 document.querySelectorAll('.knob').forEach(knob => {
@@ -1046,8 +1240,8 @@ document.querySelectorAll('.knob').forEach(knob => {
   knob.addEventListener('pointermove', e => { if (knobDrags.get('mouse')?.knob === knob) moveKnobDrag('mouse', e.clientX); });
   knob.addEventListener('pointerup', () => endKnobDrag('mouse'));
   knob.addEventListener('pointercancel', () => endKnobDrag('mouse'));
-  knob.addEventListener('focus', () => { if (inp) showKnobBar(inp, knob); });
-  knob.addEventListener('blur', () => hideKnobBarSoon());
+  knob.addEventListener('focus', () => syncKnob(knob));
+  knob.addEventListener('blur', () => syncKnob(knob));
   knob.addEventListener('keydown', e => {
     if (!inp) return;
     const step = Number(inp.step || 0.5), v = Number(inp.value);
@@ -1058,15 +1252,8 @@ document.querySelectorAll('.knob').forEach(knob => {
     if (e.key === 'PageDown') nv = v - step * 4;
     if (e.key === 'Home') nv = Number(inp.min);
     if (e.key === 'End') nv = Number(inp.max);
-    if (nv !== null) { e.preventDefault(); inp.value = Math.min(Number(inp.max), Math.max(Number(inp.min), nv)); inp.dispatchEvent(new Event('input', { bubbles: true })); showKnobBar(inp, knob); syncKnob(knob); }
+    if (nv !== null) { e.preventDefault(); inp.value = Math.min(Number(inp.max), Math.max(Number(inp.min), nv)); inp.dispatchEvent(new Event('input', { bubbles: true })); syncKnob(knob); }
   });
-});
-$('#knobTrack').addEventListener('pointerdown', e => {
-  const drag = [...knobDrags.values()].at(-1);
-  const knob = drag?.knob || document.querySelector('.knob:focus') || document.querySelector('.knob'); const inp = knob && knobInput(knob); if (!inp) return;
-  const r = e.currentTarget.getBoundingClientRect(), f = clamp((e.clientX - r.left) / r.width);
-  inp.value = Number(inp.min) + f * (Number(inp.max) - Number(inp.min));
-  inp.dispatchEvent(new Event('input', { bubbles: true })); syncKnob(knob);
 });
 // ---------- Arrastre en la onda: salto + ajuste fino anclado ----------
 // Decision de audio: seek limitado a ~11/s mientras se arrastra (throttle)
@@ -1207,7 +1394,7 @@ $('#btnGestures').onclick = e => {
   $('#gesturePaused').style.display = gesturesOn ? 'none' : 'block';
   $('#chipGest').textContent = gesturesOn ? 'Gestos: activos' : 'Gestos: pausados'; $('#chipGest').classList.toggle('on', gesturesOn);
   hands.forEach(h => { h.needRelease = true; h.pinch.reset(); });
-  if (!gesturesOn) { registry.releaseAll(); endKnobDrag(); endAllScratches(); two.reset(); freezeExpressive('Gestos pausados.'); if (fx.freeze()) fxRender(); document.querySelectorAll('[data-focus]').forEach(el => el.removeAttribute('data-focus')); $('#focusTag').hidden = true; }
+  if (!gesturesOn) { registry.releaseAll(); endKnobDrag(); endAllScratches(); two.reset(); freezeExpressive('Gestos pausados.'); if (fx.freeze()) fxRender(); if (handMode.active) exitHandMode('Modo manos cerrado al pausar los gestos: filtro a Neutro.'); document.querySelectorAll('[data-focus]').forEach(el => el.removeAttribute('data-focus')); $('#focusTag').hidden = true; }
 };
 $('#btnDiag').onclick = e => { diag = !diag; e.target.setAttribute('aria-pressed', diag); if (!diag) overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height); };
 $('#btnGuide').onclick = () => $('#guide').scrollIntoView({ behavior: 'smooth' });
@@ -1220,6 +1407,7 @@ document.addEventListener('keydown', e => {
   if (k === 'e') { if (!$('#fxEnabled').checked) { $('#fxEnabled').checked = true; $('#fxPanel').hidden = false; } fx.openPalette(); fxCycle(0); }
   if (k === 'enter' && fx.state === 'palette') { fx.prepare(fxCurrentValue()); fxRender(); }
   if (k === 'escape') {
+    if (handMode.active) { exitHandMode('Modo manos cerrado: filtro de vuelta a Neutro.'); return; }
     if (!$('#trackPicker').hidden) { closeTrackPicker(); return; }
     if (lastUndoLoad && engine && !engine.decks[lastUndoLoad.deck].playing && lastUndoLoad.prev) { const { deck, prev } = lastUndoLoad; lastUndoLoad = null; loadToDeck(deck, prev, true); status('Carga deshecha: volvió la pista anterior (el deck no estaba sonando).'); return; }
     if (fx.state === 'adjusting') fx.freeze(); else fx.closePalette(); fxRender();
@@ -1258,6 +1446,12 @@ function loop() {
     cw.classList.toggle('limiting', !!limiting);
     refreshTransport(); syncAllKnobs(); drawSpectrum(); if (performance.now() - autoDjLastCheck > 250) { autoDjLastCheck = performance.now(); checkAutoDj(autoDjLastCheck); checkBassWarn(); if (!gesturesOn) $('#stateDetail').textContent = `FPS del bucle: ${loop._fps || '—'} (con Diagnóstico y gestos se suma el detalle de manos)`; if (!$('#fxPanel').hidden) fxRender(); }
   }
+  // Probar arco sin camara: dos puntos fijos, aunque no haya gestos/tracker.
+  if (handMode.testUntil) {
+    const nowT = performance.now();
+    if (nowT < handMode.testUntil) { const w = stage.clientWidth, h = stage.clientHeight; const fake = [{ x: w * 0.32, y: h * 0.52, lm: null, det: { pinched: true } }, { x: w * 0.68, y: h * 0.52, lm: null, det: { pinched: true } }]; drawHandArc(fake, nowT, { pinchPts: fake, gateState: 'agarrado' }); }
+    else { handMode.testUntil = 0; showFxArc(false); const lb = $('#fxArcLabel'); if (lb) lb.hidden = true; const bt = $('#fxArcBeatTag'); if (bt) bt.hidden = true; }
+  }
   if (!gesturesOn || !tracker) { hands.forEach((h, i) => { const c = $(`#handCursor${i}`); if (c) c.style.display = 'none'; }); return; }
   const res = tracker.detect(); rebuildRegistry();
   const ctx = overlay.getContext('2d'); overlay.width = stage.clientWidth; overlay.height = stage.clientHeight; ctx.clearRect(0, 0, overlay.width, overlay.height);
@@ -1290,6 +1484,64 @@ function loop() {
     cursor.style.display = 'block'; cursor.style.left = x + 'px'; cursor.style.top = y + 'px'; cursor.classList.toggle('pinched', det.pinched);
     return { lm, x, y, det };
   });
+  // --- Modo manos: orden de control unico sobre la mesa ---
+  // Medir y dibujar usan el MISMO punto: el punto de pinza de cada mano.
+  if (handMode.active) {
+    const anyHand = !!(pts[0] || pts[1]), bothHands = !!(pts[0] && pts[1]);
+    if (anyHand) { handMode.seenHands = true; handMode.lostSince = null; } else if (handMode.lostSince === null) handMode.lostSince = now;
+    const pinchPts = pts.map(p => { if (!p) return null; const pp = pinchPoint(p.lm); return pp ? coverPoint(pp) : { x: p.x, y: p.y }; });
+    const pinchCount = pts.filter(p => p?.det.pinched).length;
+    if (handModeShouldExit({ anyHandPresent: anyHand, lostSince: handMode.lostSince, now, marginMs: handExitMarginMs(), seenHands: handMode.seenHands, mouseControl: handMode.mouseControl && handMode.gate.state !== 'agarrado' })) {
+      exitHandMode('Modo manos cerrado al sacar las manos: filtro de vuelta a Neutro.', { byHands: true });
+    } else {
+      const gate = handMode.gate.update({ pinchCount: bothHands ? pinchCount : (anyHand ? pinchCount : 0), now });
+      const dist01 = bothHands && pinchPts[0] && pinchPts[1] ? aperturaFromDistance(Math.hypot(pinchPts[0].x - pinchPts[1].x, pinchPts[0].y - pinchPts[1].y), stage.clientWidth) : null;
+      if (gate.event === 'grabbed') {
+        // Nueva pinza a dos manos: devuelve el control a las manos (aunque
+        // antes mandara el deslizador/flechas) y ancla sin salto.
+        handMode.mouseControl = false; handMode.ramp = null;
+        handMode.anchor = { dist01: dist01 ?? handMode.apertura, filter: handMode.filter };
+      }
+      if (gate.event === 'froze') { handMode.anchor = null; }
+      if (gate.event === 'released-both') { handMode.anchor = null; handMode.ramp = { from: handMode.filter, since: now }; }
+      if (gate.state === 'agarrado' && dist01 !== null && handMode.anchor) {
+        handMode.apertura = dist01; const sl = $('#hmApertura'); if (sl) sl.value = dist01 * 100;
+        const target = anchoredFilter({ anchorDist01: handMode.anchor.dist01, anchorFilter: handMode.anchor.filter, dist01, highpass: hmHighpass() });
+        hmSetFilter(handMode.filter + (target - handMode.filter) * 0.45);
+        handMode.smooth = dist01;
+      } else if (handMode.ramp) {
+        const v = neutralRampValue(handMode.ramp.from, now - handMode.ramp.since, 600);
+        hmSetFilter(v);
+        if (Math.abs(v) < 0.01) handMode.ramp = null;
+      }
+      // Latido con la rejilla del deck: golpe -> env=1 y decae.
+      handMode._beat = null;
+      if (hmBeatOn() && engine && decks[handMode.deck]?.grid?.bpm) {
+        const d = decks[handMode.deck], period = 60 / d.grid.bpm;
+        const bp = beatPhaseAt(engine.decks[handMode.deck].position(), d.grid.firstBeat, period);
+        if (bp) {
+          handMode._beat = bp;
+          if (bp.index !== handMode.lastBeatIdx) { handMode.lastBeatIdx = bp.index; handMode.beatEnv = 1; }
+          const vel = Math.abs(handMode.apertura - (handMode._prevAp ?? handMode.apertura));
+          if (vel > 0.012 && onBeat(bp.phase)) handMode.spark = 1;
+        }
+      } else if (engine && decks[handMode.deck]?.grid?.bpm) {
+        const d = decks[handMode.deck];
+        handMode._beat = beatPhaseAt(engine.decks[handMode.deck].position(), d.grid.firstBeat, 60 / d.grid.bpm);
+      }
+      handMode._prevAp = handMode.apertura;
+      handMode.beatEnv *= reducedMotion ? 0 : 0.92; handMode.spark *= reducedMotion ? 0 : 0.9;
+      if (!hmBeatOn()) handMode.beatEnv = 0;
+      hmDeckCardUpdate();
+      // Compas de 4 tiempos en la ficha del deck.
+      const beatsEl = $('#hmBeats');
+      if (beatsEl && handMode._beat) { const cur = ((handMode._beat.index % 4) + 4) % 4; [...beatsEl.children].forEach((el, ix) => el.classList.toggle('on', ix === cur)); }
+      const handMsg = $('#hmHandMsg');
+      if (handMsg) { const show = anyHand && !bothHands; handMsg.hidden = !show; if (show) handMsg.textContent = 'falta una mano'; }
+      drawHandArc(pts, now, { pinchPts, gateState: gate.state });
+      return;
+    }
+  }
   // --- Sesion a dos manos (solo emite eventos; el audio se aplica aqui) ---
   const twoOn = $('#twoEnabled').checked;
   let twoBusy = false;
@@ -1364,13 +1616,49 @@ function loop() {
       else $('#clawStatus').textContent = 'Garra: mano detectada, esperando enganche (0,5 s sin pinza)…';
     } else { claw.update(null, now, { min: 0, max: 1, sensitivity: 1, invert: false, rangeMin01: 0, rangeMax01: 1 }); $('#clawStatus').textContent = 'Garra: sin mano. Valor conservado.'; }
   }
+  // --- Selector PISTAS con gestos: apunte fijo, cierre sin manos, palmas ---
+  if (!$('#trackPicker').hidden) {
+    const anyHand = !!(pts[0] || pts[1]);
+    if (anyHand) picker.lastActivityAt = now;
+    // Cartel fijo de apunte: la primera mano que apunte a una tarjeta manda.
+    let pointedName = null, pointedCard = null;
+    for (const p of pts) {
+      if (!p) continue;
+      const hit = registry.hit(p.x, p.y, c => !!c.el.closest('#trackPicker'));
+      if (hit?.el.classList.contains('pickcard')) { pointedCard = hit.el; const raw = library.find(t => t.id === hit.el.dataset.trackId)?.name || null; pointedName = raw ? displayTrackName(raw) : null; break; }
+    }
+    $('#pickerPointing').textContent = pickerPointingText(pointedName);
+    if (pointedCard) pointedCard.setAttribute('data-focus', '1');
+    // Cuenta atras / cierre automatico (solo con gestos activos).
+    const idle = pickerIdleState({ open: true, gesturesOn, handsPresent: anyHand, lastActivityAt: picker.lastActivityAt, now, timeoutMs: Math.max(3, Math.min(20, Number($('#pickerIdleSec')?.value || 7))) * 1000 });
+    $('#pickerCount').textContent = idle.state === 'countdown' ? pickerCountdownText(idle.remainingMs) : '';
+    if (idle.state === 'close') closeTrackPicker('Selector cerrado por falta de manos: no se cargó ninguna pista.');
+    else {
+      // Dos palmas abiertas 1 s: salir sin cargar.
+      const bothPalms = !!(pts[0] && pts[1] && !pts[0].det.pinched && !pts[1].det.pinched);
+      if (bothPalms) {
+        if (!picker.palmsSince) picker.palmsSince = now;
+        if (now - picker.palmsSince >= 1000) closeTrackPicker('Selector cerrado con las dos palmas: no se cargó ninguna pista.');
+      } else picker.palmsSince = null;
+      // Confirmacion gestual mantenida si el deck suena (barra de progreso).
+      if (pointedCard && engine?.decks[picker.deck].playing) {
+        const pinching = pts.some(p => p?.det.pinched && registry.hit(p.x, p.y, c => c.el === pointedCard));
+        if (pinching) {
+          if (!picker.gestureHold || picker.gestureHold.id !== pointedCard.dataset.trackId) picker.gestureHold = { id: pointedCard.dataset.trackId, since: now };
+          const pct = Math.min(100, (now - picker.gestureHold.since) / 1000 * 100);
+          const bar = pointedCard.querySelector('.holdbar i'); if (bar) bar.style.width = pct + '%';
+          if (pct >= 100) { const t = library.find(x => x.id === pointedCard.dataset.trackId); picker.gestureHold = null; if (t) loadToDeck(picker.deck, t, true).then(ok => { if (ok) closeTrackPicker(); }); }
+        } else { picker.gestureHold = null; const bar = pointedCard.querySelector('.holdbar i'); if (bar) bar.style.width = '0%'; }
+      }
+    }
+  }
   // --- Mano individual: foco visible antes de pinzar ---
   document.querySelectorAll('[data-focus]').forEach(el => el.removeAttribute('data-focus'));
   document.querySelectorAll('[data-grabbed]').forEach(el => el.removeAttribute('data-grabbed'));
   let focusLabel = '';
   hands.forEach((h, hi) => {
     const p = pts[hi]; if (!p) return;
-    const hit = registry.hit(p.x, p.y);
+    const hit = $('#trackPicker').hidden ? registry.hit(p.x, p.y) : registry.hit(p.x, p.y, c => !!c.el.closest('#trackPicker'));
     if (hit && !p.det.pinched) { hit.el.setAttribute('data-focus', '1'); focusLabel = controlLabel(hit.el); $(`#handCursor${hi}`).querySelector('span').textContent = focusLabel; }
     else $(`#handCursor${hi}`).querySelector('span').textContent = p.det.pinched ? 'TOMADO' : '';
     if (twoBusy || fxBusy || expressiveActive || hi === clawHand) return;
@@ -1387,8 +1675,8 @@ function loop() {
       ctx.fillText(`Mano ${hi} (${mirrored ? 'espejo' : 'normal'}): pinza=${p.det.pinched ? 'SI' : 'no'} ratio=${pinchRatio(p.lm).toFixed(2)} foco=${controlLabel(hit?.el)} dos-manos=${two.state}`, 10, 18 + hi * 16);
     }
   });
-  const ft = $('#focusTag'); ft.hidden = !focusLabel; ft.textContent = focusLabel ? `Enfocado: ${focusLabel} — haz pinza para tomarlo` : '';
-  $('#chipFocus').textContent = `Foco: ${focusLabel || '—'}`;
+  const ft = $('#focusTag'); ft.hidden = !focusLabel; ft.textContent = focusLabel ? `Enfocado: ${focusLabel} — haz pinza para tomarlo` : ''; ft.title = ft.textContent;
+  const cf = $('#chipFocus'); cf.textContent = `Foco: ${focusLabel || '—'}`; cf.title = cf.textContent;
   $('#stateDetail').textContent = `Cámara: ${video.srcObject ? 'activa' : 'apagada'} (${mirrored ? 'espejo' : 'normal'}) · Gestos: ${gesturesOn ? 'activos' : 'pausados'} · FPS: ${loop._fps || '—'} · Foco: ${focusLabel || '—'} · Garra: ${$('#clawEnabled').checked ? (clawHand >= 0 ? 'enganchada' : 'activa sin enganchar') : 'desactivada'} · Dos manos: ${two.state}`;
 }
 loop();

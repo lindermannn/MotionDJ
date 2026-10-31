@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MotionDJ · Modo manos</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#07090c}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 810px; overflow: hidden; background: radial-gradient(ellipse 60% 70% at 50% 45%, #2a2f38 0%, #171b22 45%, #090b0f 100%); color: #e8edf2; font-family: Inter, system-ui, sans-serif;">
+
+  <div style="position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); width: 420px; height: 520px; border-radius: 48% 48% 40% 40%; background: radial-gradient(ellipse at 50% 35%, rgba(120,100,90,.35), rgba(60,50,48,.15) 60%, transparent 75%);"></div>
+  <span style="position: absolute; left: 24px; top: 74px; font-size: 12px; color: #7d8794;">[vídeo de la cámara a pantalla completa · la consola está oculta]</span>
+
+  <div style="position: absolute; left: 50%; top: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 18px; padding: 12px 14px 12px 20px; border-radius: 14px; background: rgba(12,10,28,.88); border: 2px solid {{accentFx}}; box-shadow: 0 0 24px {{accentFx}}44;">
+    <div style="display: flex; flex-direction: column; gap: 3px;">
+      <span style="font: 700 18px/1 'Barlow Condensed', sans-serif; letter-spacing: .12em;">MODO MANOS · FILTRO A</span>
+      <span style="font-size: 12px; color: #b9b3e6;">Pinza con las dos manos · junta para cerrar · separa en el golpe · saca las manos para salir</span>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button type="button" aria-pressed="true" style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid {{accentFx}}; background: #221d44; color: #e4defc; font-size: 12px; font-weight: 600; cursor: pointer;">● Latido</button>
+      <button type="button" aria-pressed="false" style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid #3b3760; background: transparent; color: #a9a3cf; font-size: 12px; font-weight: 600; cursor: pointer;">○ Partículas</button>
+      <button type="button" aria-pressed="false" style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid #3b3760; background: transparent; color: #a9a3cf; font-size: 12px; font-weight: 600; cursor: pointer;">○ Pasa-altos</button>
+    </div>
+    <button type="button" style="height: 44px; padding: 0 22px; border-radius: 10px; border: 1px solid #5b5690; background: linear-gradient(180deg, #2b2752, #1a1736); color: #ffffff; font: 700 15px/1 'Barlow Condensed', sans-serif; letter-spacing: .14em; cursor: pointer;">SALIR (Esc)</button>
+  </div>
+
+  <svg width="1440" height="810" viewBox="0 0 1440 810" role="img" aria-label="Dos manos con pinza unidas por un arco eléctrico que late al ritmo" style="position: absolute; left: 0; top: 0;">
+    <defs>
+      <linearGradient id="arcGrad" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#22D3EE"></stop>
+        <stop offset="0.5" stop-color="#7DD3FC"></stop>
+        <stop offset="1" stop-color="#9D8CFF"></stop>
+      </linearGradient>
+      <filter id="blur10" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="10"></feGaussianBlur></filter>
+      <filter id="blur4" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="4"></feGaussianBlur></filter>
+    </defs>
+
+    <path d="{{handLines}}" fill="none" stroke="{{accentA}}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"></path>
+    <path d="{{handDots}}" fill="#ffffff" opacity="0.95"></path>
+
+    <circle cx="474" cy="433" r="30" fill="none" stroke="{{accentA}}" stroke-width="2" opacity="0.25"></circle>
+    <circle cx="474" cy="433" r="17" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.9"></circle>
+    <circle cx="966" cy="433" r="30" fill="none" stroke="{{accentA}}" stroke-width="2" opacity="0.25"></circle>
+    <circle cx="966" cy="433" r="17" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.9"></circle>
+
+    <path d="{{arcMain}}" fill="none" stroke="url(#arcGrad)" stroke-width="22" stroke-linecap="round" opacity="0.45" filter="url(#blur10)"></path>
+    <path d="{{arcMain}}" fill="none" stroke="#05070a" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.65"></path>
+    <path d="{{arcMain}}" fill="none" stroke="url(#arcGrad)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="{{arcMain}}" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"></path>
+    <path d="{{arcSecond}}" fill="none" stroke="#bae6fd" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"></path>
+
+    <circle cx="{{marker.x}}" cy="{{marker.y}}" r="16" fill="#ffffff" opacity="0.35" filter="url(#blur4)"></circle>
+    <circle cx="{{marker.x}}" cy="{{marker.y}}" r="7" fill="#ffffff"></circle>
+    <circle cx="{{downbeat.x}}" cy="{{downbeat.y}}" r="11" fill="none" stroke="#facc15" stroke-width="3"></circle>
+  </svg>
+
+  <div style="position: absolute; left: 618px; top: 318px; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 204px;">
+    <span style="padding: 6px 14px; border-radius: 14px; background: rgba(5,10,16,.82); border: 1px solid {{accentA}}88; font: 700 16px/1 'Barlow Condensed', sans-serif; letter-spacing: .12em; color: #e6faff; box-shadow: 0 0 14px {{accentA}}44;">FILTRO A · LP 40 %</span>
+    <span style="width: 160px; height: 5px; border-radius: 3px; background: #1d2530; display: block; position: relative; overflow: hidden;"><span style="position: absolute; left: 0; top: 0; bottom: 0; width: 40%; background: {{accentA}}; display: block;"></span></span>
+  </div>
+  <span style="position: absolute; left: {{downbeatLabelX}}px; top: 470px; padding: 4px 10px; border-radius: 10px; background: rgba(5,10,16,.82); border: 1px solid #facc1588; font-size: 12px; font-weight: 600; color: #fde68a;">tiempo 1 en 2 golpes · separa aquí</span>
+
+  <span style="position: absolute; left: 300px; top: 650px; font-size: 12px; color: #9aa6b2;">mano izquierda · pinza cerrada</span>
+  <span style="position: absolute; left: 1020px; top: 650px; font-size: 12px; color: #9aa6b2;">mano derecha · pinza cerrada</span>
+
+  <div style="position: absolute; left: 24px; bottom: 22px; display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-radius: 12px; background: rgba(8,11,15,.82); border: 1px solid #252d37;">
+    <span style="width: 26px; height: 26px; border-radius: 7px; background: {{accentA}}; color: #061218; display: flex; align-items: center; justify-content: center; font: 700 16px/1 'Barlow Condensed', sans-serif;">A</span>
+    <div style="display: flex; flex-direction: column; gap: 3px;">
+      <span style="font-size: 13px; font-weight: 600;">Luciid — Hellfire (Original Mix)</span>
+      <span style="font-size: 11px; color: #9aa6b2;">154,1 BPM · estimado · 2:22</span>
+    </div>
+    <div style="display: flex; gap: 6px; padding-left: 10px; border-left: 1px solid #252d37;" aria-label="Compás: tiempo 3 de 4">
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #2a323c; display: block;"></span>
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #2a323c; display: block;"></span>
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: {{accentA}}; box-shadow: 0 0 10px {{accentA}}; display: block;"></span>
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: #2a323c; display: block;"></span>
+    </div>
+  </div>
+  <div style="position: absolute; right: 24px; bottom: 22px; padding: 10px 16px; border-radius: 12px; background: rgba(8,11,15,.82); border: 1px solid #252d37; font-size: 12px; color: #c9d3dc;">Saca las dos manos de la pantalla para volver a la consola</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accentA":{"editor":"color","default":"#22d3ee","options":["#22d3ee","#38bdf8","#2dd4bf"]},"accentFx":{"editor":"color","default":"#9d8cff","options":["#9d8cff","#c4b5fd","#e2e8f0"]},"$preview":{"width":1440,"height":810}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const A = this.props.accentA ?? '#22d3ee';
+    const F = this.props.accentFx ?? '#9d8cff';
+    const L = [[340,610],[385,575],[425,540],[452,500],[468,438],[395,500],[425,455],[450,432],[472,428],[370,492],[385,430],[393,392],[398,360],[345,500],[350,442],[353,408],[355,380],[322,515],[315,470],[311,442],[309,418]];
+    const R = L.map((p) => [1440 - p[0], p[1]]);
+    const C = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
+    const lines = (H) => C.map((c) => 'M ' + H[c[0]][0] + ' ' + H[c[0]][1] + ' L ' + H[c[1]][0] + ' ' + H[c[1]][1]).join(' ');
+    const dots = (H) => H.map((p) => 'M ' + (p[0] - 4) + ' ' + p[1] + ' a 4 4 0 1 0 8 0 a 4 4 0 1 0 -8 0').join(' ');
+    const P0 = [474, 433], P1 = [966, 433], Q = [720, 392];
+    const pt = (t) => [(1 - t) * (1 - t) * P0[0] + 2 * (1 - t) * t * Q[0] + t * t * P1[0], (1 - t) * (1 - t) * P0[1] + 2 * (1 - t) * t * Q[1] + t * t * P1[1]];
+    const nrm = (t) => { const dx = 2 * (1 - t) * (Q[0] - P0[0]) + 2 * t * (P1[0] - Q[0]); const dy = 2 * (1 - t) * (Q[1] - P0[1]) + 2 * t * (P1[1] - Q[1]); const l = Math.hypot(dx, dy) || 1; return [-dy / l, dx / l]; };
+    const rnd = (i, s) => { const x = Math.sin(i * 12.9898 + s * 78.233) * 43758.5453; return x - Math.floor(x); };
+    const wave = (seed, amp) => {
+      const N = 140; let d = '';
+      for (let i = 0; i <= N; i++) {
+        const t = i / N, env = Math.sin(Math.PI * t), p = pt(t), n = nrm(t);
+        const w = amp * env * (0.55 * Math.sin(t * Math.PI * 2 * 9 + seed) + 0.3 * Math.sin(t * Math.PI * 2 * 23 + seed * 2) + 0.35 * (rnd(i, seed) - 0.5));
+        d += (i === 0 ? 'M ' : ' L ') + (p[0] + n[0] * w).toFixed(1) + ' ' + (p[1] + n[1] * w).toFixed(1);
+      }
+      return d;
+    };
+    const m = pt(0.62), db = pt(0.82);
+    return {
+      accentA: A, accentFx: F,
+      handLines: lines(L) + ' ' + lines(R),
+      handDots: dots(L) + ' ' + dots(R),
+      arcMain: wave(1.7, 30),
+      arcSecond: wave(4.3, 18),
+      marker: { x: m[0].toFixed(1), y: m[1].toFixed(1) },
+      downbeat: { x: db[0].toFixed(1), y: db[1].toFixed(1) },
+      downbeatLabelX: Math.round(db[0] - 110)
+    };
+  }
+}
+</script>
+</body>
+</html>

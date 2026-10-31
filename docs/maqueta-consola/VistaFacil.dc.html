@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MotionDJ · Vista fácil</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#07090c}
+a{color:#7dd3fc}a:hover{color:#bae6fd}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="min-height: 900px; width: 100%; box-sizing: border-box; background: #07090c; color: #e8edf2; font-family: Inter, system-ui, sans-serif; display: flex; flex-direction: column;">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 12px 22px; background: #0c1015; border-bottom: 1px solid #1d242d;">
+  <div style="display: flex; align-items: center; gap: 10px;">
+    <div style="width: 38px; height: 38px; border-radius: 10px; background: #12171e; border: 1px solid #2a323d; display: flex; align-items: center; justify-content: center; font: 700 22px/1 'Barlow Condensed', sans-serif; color: {{accentA}};">M</div>
+    <div style="display: flex; flex-direction: column; gap: 2px;">
+      <span style="font: 700 18px/1 'Barlow Condensed', sans-serif; letter-spacing: .04em;">MOTIONDJ</span>
+      <span style="font-size: 11px; color: #8d99a6;">Control por manos · Web Audio · Local</span>
+    </div>
+  </div>
+  <div style="display: flex; padding: 3px; gap: 3px; background: #10141a; border: 1px solid #222a33; border-radius: 10px;">
+    <button type="button" aria-pressed="true" style="height: 32px; padding: 0 16px; border-radius: 7px; border: 0; background: #222a35; color: #ffffff; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: inset 0 -2px 0 {{accentA}};">Vista fácil</button>
+    <button type="button" style="height: 32px; padding: 0 16px; border-radius: 7px; border: 0; background: transparent; color: #9aa6b2; font-size: 13px; font-weight: 600; cursor: pointer;">Vista DJ</button>
+  </div>
+  <span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 14px; border: 1px solid #1f3a2b; background: #0e1a14; color: #86efac; font-size: 12px;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #22c55e;"></span>Cámara y gestos activos</span>
+  <div style="flex: 1 1 20px;"></div>
+  <button type="button" style="height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid #262e38; background: #12171d; color: #c9d3dc; font-size: 13px; cursor: pointer;">Demo guiada</button>
+  <button type="button" style="height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid #4a1f25; background: #1a0f12; color: #fecaca; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 7px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: #ef4444;"></span>Grabar mezcla</button>
+</header>
+
+<main style="position: relative; flex: 1 1 auto; display: flex; flex-direction: column; padding: 18px 22px 22px; background: radial-gradient(ellipse 70% 60% at 50% 0%, #1a2330 0%, #0b0f14 55%, #07090c 100%);">
+  <div style="align-self: center; padding: 7px 14px; border-radius: 16px; background: rgba(10,14,19,.7); border: 1px solid #212932; color: #9aa6b2; font-size: 12px;">Vídeo de la cámara detrás · pocos controles, grandes y fáciles de pinzar</div>
+  <div style="flex: 1 1 120px; min-height: 120px;"></div>
+
+  <section aria-label="Consola fácil" style="display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; padding: 14px; border-radius: 22px; background: linear-gradient(180deg, rgba(22,27,34,.92), rgba(12,15,20,.94)); border: 1px solid #252d37; box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 30px 60px rgba(0,0,0,.55);">
+
+    <article aria-label="Deck A" style="flex: 1 1 440px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 16px; background: linear-gradient(180deg, #181d25, #11151b); border: 1px solid #262e39;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="width: 34px; height: 34px; border-radius: 9px; background: {{accentA}}; color: #061218; display: flex; align-items: center; justify-content: center; font: 700 21px/1 'Barlow Condensed', sans-serif;">A</span>
+        <span style="flex: 1 1 auto; min-width: 0; font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Luciid — Hellfire (Original Mix)</span>
+        <span style="font: 600 18px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums;">2:22 <span style="color: #8d99a6; font-size: 14px;">/ 6:00</span></span>
+      </div>
+      <div style="position: relative; height: 40px; display: flex; align-items: center; gap: 1px; padding: 0 4px; border-radius: 8px; background: #0b0e12; border: 1px solid #1f262f; overflow: hidden;">
+        <sc-for list="{{overA}}" as="b" hint-placeholder-count="90">
+          <span style="flex: 1 1 0; height: {{b.h}}px; border-radius: 1px; background: {{b.c}};"></span>
+        </sc-for>
+        <span style="position: absolute; top: 0; bottom: 0; left: 39%; width: 2px; background: #ffffff; box-shadow: 0 0 6px #ffffff;"></span>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 18px;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+          <button type="button" aria-label="CUE deck A" style="width: 80px; height: 80px; border-radius: 50%; border: 2px solid #3a434f; background: radial-gradient(circle at 50% 35%, #2b323c, #11151a 72%); box-shadow: 0 0 0 4px #0b0e12; color: #f5b13d; font: 700 17px/1 'Barlow Condensed', sans-serif; letter-spacing: .08em; cursor: pointer;">CUE</button>
+          <button type="button" aria-label="Pausar deck A (sonando)" style="width: 100px; height: 100px; border-radius: 50%; border: 2px solid {{accentA}}; background: radial-gradient(circle at 50% 35%, #2b323c, #10141a 72%); box-shadow: 0 0 0 4px #0b0e12, 0 0 24px {{accentA}}66; color: {{accentA}}; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            <svg width="40" height="40" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5v14l9-7z" fill="currentColor"></path><rect x="14.5" y="5" width="2.6" height="14" rx="1" fill="currentColor"></rect><rect x="19" y="5" width="2.6" height="14" rx="1" fill="currentColor"></rect></svg>
+          </button>
+        </div>
+        <button type="button" aria-label="Jog del deck A" style="position: relative; width: 230px; height: 230px; border-radius: 50%; padding: 0; border: 0; cursor: pointer; background: #0c0f14; box-shadow: 0 0 0 3px {{accentA}}, 0 0 28px {{accentA}}40, inset 0 0 34px rgba(0,0,0,.85);">
+          <span style="position: absolute; inset: 20px; border-radius: 50%; background: repeating-radial-gradient(circle at 50% 50%, #0f1317 0px, #0f1317 2px, #171c23 2px, #171c23 3px); display: block;"></span>
+          <span style="position: absolute; left: 50%; top: 50%; width: 86px; height: 86px; margin: -43px 0 0 -43px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #3a4350, #12161c 70%); box-shadow: 0 0 0 2px {{accentA}}77; display: flex; align-items: center; justify-content: center; font: 700 26px/1 'Barlow Condensed', sans-serif; color: {{accentA}};">A</span>
+        </button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <button type="button" style="height: 52px; padding: 0 18px; border-radius: 26px; border: 1px solid #2c3540; background: linear-gradient(180deg, #1b212a, #12171d); color: #e8edf2; display: inline-flex; align-items: center; gap: 10px; font: 700 15px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; cursor: pointer;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h11"></path><path d="M3 11h11"></path><path d="M3 16h7"></path><path d="M17 17.5V6.5l4-1.2"></path><circle cx="15" cy="17.5" r="2.2"></circle></svg>CAMBIAR PISTA
+        </button>
+        <div style="flex: 1 1 auto;"></div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+          <button type="button" aria-label="Efecto con las manos en el deck A" style="width: 92px; height: 92px; border-radius: 50%; border: 2px solid {{accentFx}}; background: radial-gradient(circle at 50% 35%, #2c2a3f, #12111b 72%); box-shadow: 0 0 0 5px #0b0e12, 0 0 24px {{accentFx}}55; color: {{accentFx}}; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12"></path><path d="M11 11.5V4a1.5 1.5 0 0 1 3 0v7.5"></path><path d="M14 11.5V5.5a1.5 1.5 0 0 1 3 0V13"></path><path d="M17 12.5V9a1.5 1.5 0 0 1 3 0v5c0 4-3 7-7 7h-1.5c-2.2 0-3.8-1-5-2.7L3.4 15a1.6 1.6 0 0 1 2.4-2l2.2 2"></path></svg>
+          </button>
+          <span style="font: 700 11px/1 'Barlow Condensed', sans-serif; letter-spacing: .16em; color: #cfc8ff;">MANOS · FX</span>
+        </div>
+      </div>
+    </article>
+
+    <article aria-label="Mezclador fácil" style="flex: 0 1 380px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; padding: 18px; border-radius: 16px; background: linear-gradient(180deg, #161b22, #0f1318); border: 1px solid #262e39;">
+      <button type="button" style="height: 64px; border-radius: 16px; border: 1px solid #3b4a5a; background: linear-gradient(180deg, #24303d, #161d26); color: #ffffff; font: 700 18px/1 'Barlow Condensed', sans-serif; letter-spacing: .14em; cursor: pointer; box-shadow: 0 0 0 1px rgba(255,255,255,.04), 0 8px 18px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08); display: flex; align-items: center; justify-content: center; gap: 10px;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h11l-3-3"></path><path d="M20 17H9l3 3"></path></svg>IGUALAR Y MEZCLAR
+      </button>
+      <span style="align-self: center; margin-top: -8px; font-size: 11px; color: #8d99a6;">SYNC + mezcla suave en 8 s</span>
+
+      <div style="display: grid; grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr); gap: 10px; align-items: center;">
+        <button type="button" aria-label="Graves A, −8 dB" style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px; border: 0; background: none; color: inherit; cursor: pointer;">
+          <span style="position: relative; width: 72px; height: 72px; border-radius: 50%; background: {{lowA.ring}}; display: block;">
+            <span style="position: absolute; inset: 6px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #3b4451, #151a21 70%); display: block;"></span>
+            <span style="position: absolute; left: 50%; top: 9px; width: 4px; height: 19px; margin-left: -2px; border-radius: 2px; background: #ffffff; box-shadow: 0 0 6px rgba(255,255,255,.55); transform-origin: 2px 27px; transform: rotate({{lowA.ang}}deg); display: block;"></span>
+          </span>
+          <span style="font: 700 12px/1 'Barlow Condensed', sans-serif; letter-spacing: .12em;">GRAVES A</span>
+          <span style="font-size: 10px; color: #8d99a6;">−8 dB</span>
+        </button>
+        <div style="display: flex; justify-content: center; gap: 5px;">
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <sc-for list="{{meterA}}" as="m" hint-placeholder-count="12">
+              <span style="width: 11px; height: 9px; border-radius: 2px; background: {{m.c}}; opacity: {{m.op}}; display: block;"></span>
+            </sc-for>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <sc-for list="{{meterB}}" as="m" hint-placeholder-count="12">
+              <span style="width: 11px; height: 9px; border-radius: 2px; background: {{m.c}}; opacity: {{m.op}}; display: block;"></span>
+            </sc-for>
+          </div>
+        </div>
+        <button type="button" aria-label="Graves B, 0 dB" style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px; border: 0; background: none; color: inherit; cursor: pointer;">
+          <span style="position: relative; width: 72px; height: 72px; border-radius: 50%; background: {{lowB.ring}}; display: block;">
+            <span style="position: absolute; inset: 6px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #3b4451, #151a21 70%); display: block;"></span>
+            <span style="position: absolute; left: 50%; top: 9px; width: 4px; height: 19px; margin-left: -2px; border-radius: 2px; background: #ffffff; box-shadow: 0 0 6px rgba(255,255,255,.55); transform-origin: 2px 27px; transform: rotate({{lowB.ang}}deg); display: block;"></span>
+          </span>
+          <span style="font: 700 12px/1 'Barlow Condensed', sans-serif; letter-spacing: .12em;">GRAVES B</span>
+          <span style="font-size: 10px; color: #8d99a6;">0 dB</span>
+        </button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 10px;">
+        <label style="position: relative; justify-self: center; width: 60px; height: 140px; display: block; cursor: pointer;">
+          <input type="range" min="0" max="100" value="80" aria-label="Volumen A" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0;">
+          <span style="position: absolute; left: 50%; top: 6px; bottom: 6px; width: 6px; margin-left: -3px; border-radius: 3px; background: #06080b; border: 1px solid #2a323c; display: block;"></span>
+          <span style="position: absolute; left: 50%; bottom: 6px; height: 74%; width: 6px; margin-left: -3px; border-radius: 3px; background: {{accentA}}88; display: block;"></span>
+          <span style="position: absolute; left: 50%; bottom: 74%; width: 48px; height: 26px; margin: 0 0 -13px -24px; border-radius: 5px; background: linear-gradient(180deg, #4b5563, #2a313b); border: 1px solid #5b6674; display: block;"><span style="position: absolute; left: 7px; right: 7px; top: 50%; height: 2px; margin-top: -1px; background: #ffffff; display: block;"></span></span>
+        </label>
+        <button type="button" aria-label="MASTER, 85 %" style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 4px 22px; border: 0; background: none; color: inherit; cursor: pointer;">
+          <span style="position: relative; width: 60px; height: 60px; border-radius: 50%; background: {{master.ring}}; display: block;">
+            <span style="position: absolute; inset: 6px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #444e5c, #151a21 70%); display: block;"></span>
+            <span style="position: absolute; left: 50%; top: 8px; width: 4px; height: 16px; margin-left: -2px; border-radius: 2px; background: #ffffff; transform-origin: 2px 22px; transform: rotate({{master.ang}}deg); display: block;"></span>
+          </span>
+          <span style="font: 700 11px/1 'Barlow Condensed', sans-serif; letter-spacing: .16em;">MASTER</span>
+        </button>
+        <label style="position: relative; justify-self: center; width: 60px; height: 140px; display: block; cursor: pointer;">
+          <input type="range" min="0" max="100" value="62" aria-label="Volumen B" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0;">
+          <span style="position: absolute; left: 50%; top: 6px; bottom: 6px; width: 6px; margin-left: -3px; border-radius: 3px; background: #06080b; border: 1px solid #2a323c; display: block;"></span>
+          <span style="position: absolute; left: 50%; bottom: 6px; height: 58%; width: 6px; margin-left: -3px; border-radius: 3px; background: {{accentB}}88; display: block;"></span>
+          <span style="position: absolute; left: 50%; bottom: 58%; width: 48px; height: 26px; margin: 0 0 -13px -24px; border-radius: 5px; background: linear-gradient(180deg, #4b5563, #2a313b); border: 1px solid #5b6674; display: block;"><span style="position: absolute; left: 7px; right: 7px; top: 50%; height: 2px; margin-top: -1px; background: #ffffff; display: block;"></span></span>
+        </label>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font: 700 15px/1 'Barlow Condensed', sans-serif; color: {{accentA}};">A</span>
+        <label style="position: relative; flex: 1 1 auto; height: 54px; display: block; cursor: pointer;">
+          <input type="range" min="-1" max="1" step="0.01" value="0" aria-label="Crossfader A a B" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0;">
+          <span style="position: absolute; left: 8px; right: 8px; top: 50%; height: 7px; margin-top: -3.5px; border-radius: 4px; background: linear-gradient(90deg, {{accentA}}99, #2a323c 45%, #2a323c 55%, {{accentB}}99); display: block;"></span>
+          <span style="position: absolute; left: 50%; top: 50%; width: 30px; height: 48px; margin: -24px 0 0 -15px; border-radius: 6px; background: linear-gradient(90deg, #4b5563, #2a313b); border: 1px solid #5b6674; display: block;"><span style="position: absolute; top: 7px; bottom: 7px; left: 50%; width: 2px; margin-left: -1px; background: #ffffff; display: block;"></span></span>
+        </label>
+        <span style="font: 700 15px/1 'Barlow Condensed', sans-serif; color: {{accentB}};">B</span>
+      </div>
+    </article>
+
+    <article aria-label="Deck B" style="flex: 1 1 440px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 16px; background: linear-gradient(180deg, #181d25, #11151b); border: 1px solid #262e39;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="width: 34px; height: 34px; border-radius: 9px; background: {{accentB}}; color: #1a0610; display: flex; align-items: center; justify-content: center; font: 700 21px/1 'Barlow Condensed', sans-serif;">B</span>
+        <span style="flex: 1 1 auto; min-width: 0; font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Triptykh — Bass Keeps Going</span>
+        <span style="font: 600 18px/1 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums;">0:47 <span style="color: #8d99a6; font-size: 14px;">/ 5:15</span></span>
+      </div>
+      <div style="position: relative; height: 40px; display: flex; align-items: center; gap: 1px; padding: 0 4px; border-radius: 8px; background: #0b0e12; border: 1px solid #1f262f; overflow: hidden;">
+        <sc-for list="{{overB}}" as="b" hint-placeholder-count="90">
+          <span style="flex: 1 1 0; height: {{b.h}}px; border-radius: 1px; background: {{b.c}};"></span>
+        </sc-for>
+        <span style="position: absolute; top: 0; bottom: 0; left: 15%; width: 2px; background: #ffffff; box-shadow: 0 0 6px #ffffff;"></span>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 18px;">
+        <button type="button" aria-label="Jog del deck B" style="position: relative; width: 230px; height: 230px; border-radius: 50%; padding: 0; border: 0; cursor: pointer; background: #0c0f14; box-shadow: 0 0 0 3px {{accentB}}, 0 0 28px {{accentB}}40, inset 0 0 34px rgba(0,0,0,.85);">
+          <span style="position: absolute; inset: 20px; border-radius: 50%; background: repeating-radial-gradient(circle at 50% 50%, #0f1317 0px, #0f1317 2px, #171c23 2px, #171c23 3px); display: block;"></span>
+          <span style="position: absolute; left: 50%; top: 50%; width: 86px; height: 86px; margin: -43px 0 0 -43px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #3a4350, #12161c 70%); box-shadow: 0 0 0 2px {{accentB}}77; display: flex; align-items: center; justify-content: center; font: 700 26px/1 'Barlow Condensed', sans-serif; color: {{accentB}};">B</span>
+        </button>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+          <button type="button" aria-label="CUE deck B" style="width: 80px; height: 80px; border-radius: 50%; border: 2px solid #3a434f; background: radial-gradient(circle at 50% 35%, #2b323c, #11151a 72%); box-shadow: 0 0 0 4px #0b0e12; color: #f5b13d; font: 700 17px/1 'Barlow Condensed', sans-serif; letter-spacing: .08em; cursor: pointer;">CUE</button>
+          <button type="button" aria-label="Reproducir deck B" style="width: 100px; height: 100px; border-radius: 50%; border: 2px solid #3a434f; background: radial-gradient(circle at 50% 35%, #2b323c, #10141a 72%); box-shadow: 0 0 0 4px #0b0e12; color: {{accentB}}; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            <svg width="40" height="40" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5v14l9-7z" fill="currentColor"></path><rect x="14.5" y="5" width="2.6" height="14" rx="1" fill="currentColor"></rect><rect x="19" y="5" width="2.6" height="14" rx="1" fill="currentColor"></rect></svg>
+          </button>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+          <button type="button" aria-label="Efecto con las manos en el deck B" style="width: 92px; height: 92px; border-radius: 50%; border: 2px solid #3d3a5c; background: radial-gradient(circle at 50% 35%, #2a2838, #12111b 72%); box-shadow: 0 0 0 5px #0b0e12; color: #b9b0f5; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12"></path><path d="M11 11.5V4a1.5 1.5 0 0 1 3 0v7.5"></path><path d="M14 11.5V5.5a1.5 1.5 0 0 1 3 0V13"></path><path d="M17 12.5V9a1.5 1.5 0 0 1 3 0v5c0 4-3 7-7 7h-1.5c-2.2 0-3.8-1-5-2.7L3.4 15a1.6 1.6 0 0 1 2.4-2l2.2 2"></path></svg>
+          </button>
+          <span style="font: 700 11px/1 'Barlow Condensed', sans-serif; letter-spacing: .16em; color: #b9b0f5;">MANOS · FX</span>
+        </div>
+        <div style="flex: 1 1 auto;"></div>
+        <button type="button" style="height: 52px; padding: 0 18px; border-radius: 26px; border: 1px solid #2c3540; background: linear-gradient(180deg, #1b212a, #12171d); color: #e8edf2; display: inline-flex; align-items: center; gap: 10px; font: 700 15px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; cursor: pointer;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h11"></path><path d="M3 11h11"></path><path d="M3 16h7"></path><path d="M17 17.5V6.5l4-1.2"></path><circle cx="15" cy="17.5" r="2.2"></circle></svg>CAMBIAR PISTA
+        </button>
+      </div>
+    </article>
+  </section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accentA":{"editor":"color","default":"#22d3ee","options":["#22d3ee","#38bdf8","#2dd4bf"]},"accentB":{"editor":"color","default":"#ff4fa3","options":["#ff4fa3","#f472b6","#fb7185"]},"accentFx":{"editor":"color","default":"#9d8cff","options":["#9d8cff","#c4b5fd","#e2e8f0"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const A = this.props.accentA ?? '#22d3ee';
+    const B = this.props.accentB ?? '#ff4fa3';
+    const F = this.props.accentFx ?? '#9d8cff';
+    const rnd = (i, s) => { const x = Math.sin(i * 12.9898 + s * 78.233) * 43758.5453; return x - Math.floor(x); };
+    const over = (seed, played, c) => Array.from({ length: 90 }, (_, i) => {
+      const env = 0.35 + 0.65 * Math.abs(Math.sin(i / 90 * Math.PI * 3 + seed));
+      return { h: Math.round(5 + env * (0.55 + 0.45 * rnd(i, seed)) * 28), c: i / 90 < played ? c : '#3a4552' };
+    });
+    const ring = (frac, bip, c) => {
+      const ang = -135 + frac * 270;
+      let start, span;
+      if (bip) { start = ang < 0 ? 360 + ang : 0; span = Math.abs(ang); } else { start = 225; span = frac * 270; }
+      return { ang: ang.toFixed(1), ring: 'conic-gradient(from ' + start + 'deg, ' + c + ' 0deg ' + span + 'deg, transparent ' + span + 'deg 360deg), conic-gradient(from 225deg, #29313b 0deg 270deg, transparent 270deg 360deg)' };
+    };
+    const meter = (lvl) => Array.from({ length: 12 }, (_, i) => {
+      const idx = 11 - i;
+      const c = idx >= 10 ? '#ef4444' : idx >= 8 ? '#f59e0b' : '#22c55e';
+      return { c: c, op: idx < lvl ? 1 : 0.14 };
+    });
+    return {
+      accentA: A, accentB: B, accentFx: F,
+      overA: over(1.3, 0.39, A), overB: over(4.1, 0.15, B),
+      lowA: ring(0.5625, false, A), lowB: ring(0.8125, false, B),
+      master: ring(0.85, false, '#e8edf2'),
+      meterA: meter(9), meterB: meter(3)
+    };
+  }
+}
+</script>
+</body>
+</html>

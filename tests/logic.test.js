@@ -27,6 +27,14 @@ test('crossfader equal-power extremos y centro', () => {
   const c = crossfaderGains(0);
   assert.ok(Math.abs(c.a - Math.SQRT1_2) < 1e-9 && Math.abs(c.b - Math.SQRT1_2) < 1e-9);
 });
+test('registro con predicado: con el selector abierto la pinza no cae en la consola de debajo', () => {
+  const r = new ControlRegistry();
+  r.register('consola', { x: 0, y: 0, w: 200, h: 200 }, { el: { closest: () => null } });
+  r.register('tarjeta', { x: 0, y: 0, w: 100, h: 100 }, { el: { closest: s => (s === '#trackPicker' ? {} : null) } });
+  assert.equal(r.hit(50, 50, c => !!c.el.closest('#trackPicker')).id, 'tarjeta');
+  assert.equal(r.hit(150, 150, c => !!c.el.closest('#trackPicker')), null); // fuera de tarjetas: nada, no la consola
+  assert.equal(r.hit(150, 150).id, 'consola'); // sin predicado (selector cerrado) sigue igual
+});
 test('una mano no roba el control de la otra y perderla libera solo el suyo', () => {
   const r = new ControlRegistry();
   r.register('x', { x: 0, y: 0, w: 10, h: 10 });
@@ -285,6 +293,28 @@ test('beatgrid: criterio musical de octava para musica de baile (132 leido a 66)
   assert.ok(Math.abs(acc.bpm - 132) <= 0.6, `132 con acento: ${acc.bpm}`);
   const slow = analyzeBeatgrid(synth(66, false), sr); // 66 uniforme: no se dobla
   assert.ok(Math.abs(slow.bpm - 66) <= 0.3, `66 uniforme: ${slow.bpm}`);
+  // Bloque 5: umbral ampliado (0,22). Soporte debil intermedio ya dobla.
+  assert.ok(Math.abs(musicalOctave(53.3, 0.30) - 106.6) < 1e-9);
+  assert.ok(Math.abs(musicalOctave(55, 0.32) - 110) < 1e-9);
+  assert.equal(musicalOctave(53.3, 0.10), 53.3); // soporte flojo: no dobla, marcara posible mitad
+  assert.equal(musicalOctave(53, -0.01), 53);
+  // Senales ~53/~55 (candidato) que son en realidad 106/110 con golpe
+  // intermedio debil (0,16): deben leerse ~106/~110.
+  const weakSynth = (bpm, weak) => {
+    const data = new Float32Array(sr * 12), beat = 60 / bpm;
+    const kick = (t0, amp) => { const n0 = Math.floor(t0 * sr); for (let i = 0; i < sr * 0.12 && n0 + i < data.length; i++) { const tt = i / sr; data[n0 + i] += Math.sin(2 * Math.PI * (58 - tt * 160) * tt) * Math.exp(-tt * 28) * amp; } };
+    let k = 0; for (let tt = 0.21; tt < 12; tt += beat, k++) kick(tt, k % 2 ? weak : 0.95);
+    return data;
+  };
+  for (const bpm of [106, 110]) {
+    const r = analyzeBeatgrid(weakSynth(bpm, 0.16), sr);
+    assert.ok(Math.abs(r.bpm - bpm) <= 0.6, ` debil intermedio ${bpm}: ${r.bpm}`);
+  }
+  // Y un 53/55 lento uniforme NO se dobla (sigue siendo lento de verdad).
+  for (const bpm of [53, 55]) {
+    const r = analyzeBeatgrid(weakSynth(bpm, 0.95), sr);
+    assert.ok(Math.abs(r.bpm - bpm) <= 0.4, ` lento uniforme ${bpm}: ${r.bpm}`);
+  }
 });
 test('beatgrid: cuantizacion, alineacion de fase, TAP y tiempo de eco', async () => {
   const { quantizeToBeat, beatPhase01, alignToPhase, tapTempo, beatDelayTime } = await import('../src/audio/beatgrid.js');
@@ -481,6 +511,95 @@ test('filtro bipolar: centro neutro, un lado pasa-bajos y el otro pasa-altos', a
   const hp = filterFreqs(50); assert.equal(hp.lp, 18000); assert.equal(Math.round(hp.hp), 4000);
   assert.ok(filterFreqs(-25).lp < 18000 && filterFreqs(-25).lp > 400);
   assert.ok(filterFreqs(25).hp > 10 && filterFreqs(25).hp < 4000);
+});
+test('Modo manos: apertura monotona al filtro, latido y salida instantanea', async () => {
+  const { aperturaToFilter, aperturaFromDistance, beatPhaseAt, onBeat, handModeShouldExit, pinchPoint, anchoredFilter, neutralRampValue, DoublePinchGate } = await import('../src/audio/handfx.js');
+  // Mapeo acordado: juntas = LP cerrado, separadas = Neutro (sin HP por defecto).
+  assert.equal(aperturaToFilter(0), -50); assert.equal(aperturaToFilter(1), 0); assert.equal(aperturaToFilter(0.5), -25);
+  // Pasa-altos solo con el interruptor: entonces si existe HP.
+  assert.equal(aperturaToFilter(0.5, { highpass: true }), 0); assert.equal(aperturaToFilter(1, { highpass: true }), 50); assert.equal(aperturaToFilter(0, { highpass: true }), -50);
+  let prev = -Infinity; for (let a = 0; a <= 1.001; a += 0.1) { const v = aperturaToFilter(a); assert.ok(v >= prev, 'monotona'); prev = v; }
+  // Punto de pinza: medio pulgar-indice, el mismo para medir y dibujar.
+  const lm = Array.from({ length: 21 }, () => ({ x: 0, y: 0 })); lm[4] = { x: 0.2, y: 0.4 }; lm[8] = { x: 0.4, y: 0.6 };
+  const pp = pinchPoint(lm); assert.ok(Math.abs(pp.x - 0.3) < 1e-9 && Math.abs(pp.y - 0.5) < 1e-9); assert.equal(pinchPoint(null), null);
+  // Anclaje relativo: sin salto al agarrar y solo delta de distancia.
+  assert.equal(anchoredFilter({ anchorDist01: 0.4, anchorFilter: -20, dist01: 0.4 }), -20);
+  assert.ok(Math.abs(anchoredFilter({ anchorDist01: 0.4, anchorFilter: -20, dist01: 0.6 }) + 10) < 1e-9); // +0,2 de apertura = +10 sin HP
+  assert.ok(Math.abs(anchoredFilter({ anchorDist01: 0.4, anchorFilter: -20, dist01: 0.6, highpass: true }) - 0) < 1e-9);
+  assert.ok(Math.abs(anchoredFilter({ anchorDist01: 0.4, anchorFilter: -20, dist01: 0 }) + 40) < 1e-9);
+  assert.equal(anchoredFilter({ anchorDist01: 0.4, anchorFilter: 0, dist01: 1 }), 0); // techo Neutro sin HP
+  // Rampa a Neutro al soltar las dos.
+  assert.equal(neutralRampValue(-50, 0), -50); assert.equal(neutralRampValue(-50, 600), 0); assert.ok(Math.abs(neutralRampValue(-50, 300) + 25) < 1e-9);
+  // Puerta a dos pinzas: 150 ms, congela con una, rampa con ninguna.
+  const g = new DoublePinchGate({ holdMs: 150 });
+  assert.equal(g.update({ pinchCount: 2, now: 0 }).state, 'armando');
+  assert.equal(g.update({ pinchCount: 2, now: 100 }).state, 'armando'); // aun no
+  assert.equal(g.update({ pinchCount: 2, now: 150 }).event, 'grabbed');
+  assert.equal(g.update({ pinchCount: 1, now: 200 }).event, 'froze');
+  assert.equal(g.update({ pinchCount: 2, now: 210 }).state, 'armando'); // reagarrar exige de nuevo el hold
+  assert.equal(g.update({ pinchCount: 2, now: 360 }).event, 'grabbed');
+  assert.equal(g.update({ pinchCount: 0, now: 400 }).event, 'released-both');
+  const g2 = new DoublePinchGate({ holdMs: 150 });
+  g2.update({ pinchCount: 0, now: 0 }); assert.equal(g2.state, 'reposo'); // sin pinza: reposo, filtro no cambia
+  const { bezierPoint, downbeatInfo, filterColor } = await import('../src/audio/handfx.js');
+  assert.deepEqual(bezierPoint({ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 100, y: 0 }, 0.5), { x: 50, y: 0 });
+  // Tiempo 1: en el indice 6 (tercer golpe del compas) faltan 2 golpes (al 8).
+  const db = downbeatInfo({ index: 6, phase: 0 }); assert.equal(db.beatsCount, 2); assert.ok(Math.abs(db.progress - 0.5) < 1e-9);
+  assert.equal(downbeatInfo({ index: 4, phase: 0 }).beatsCount, 0);
+  assert.equal(downbeatInfo(null), null);
+  assert.equal(filterColor(-50), 'rgb(34,211,238)'); assert.equal(filterColor(0), 'rgb(255,79,163)'); assert.equal(filterColor(50, true), 'rgb(255,79,163)');
+  assert.equal(aperturaFromDistance(150, 1000), 0); assert.equal(aperturaFromDistance(750, 1000), 1);
+  assert.ok(Math.abs(aperturaFromDistance(450, 1000) - 0.5) < 1e-9);
+  const b = beatPhaseAt(2.3, 0.2, 0.5); assert.equal(b.index, 4); assert.ok(Math.abs(b.phase - 0.2) < 1e-9);
+  assert.equal(beatPhaseAt(1, 0, 0), null);
+  assert.equal(onBeat(0.02), true); assert.equal(onBeat(0.97), true); assert.equal(onBeat(0.5), false);
+  // Salida: con una mano presente no sale; sin manos sale al margen (180 ms).
+  assert.equal(handModeShouldExit({ anyHandPresent: true, lostSince: 0, now: 99999 }), false);
+  assert.equal(handModeShouldExit({ anyHandPresent: false, lostSince: 1000, now: 1179 }), false);
+  assert.equal(handModeShouldExit({ anyHandPresent: false, lostSince: 1000, now: 1180 }), true);
+  assert.equal(handModeShouldExit({ anyHandPresent: false, lostSince: null, now: 5000 }), false);
+  // No sale si aun no se han visto manos (entrar y levantarlas) ni con el sustituto.
+  assert.equal(handModeShouldExit({ anyHandPresent: false, lostSince: 1000, now: 99999, seenHands: false }), false);
+  assert.equal(handModeShouldExit({ anyHandPresent: false, lostSince: 1000, now: 99999, seenHands: true, mouseControl: true }), false);
+  assert.equal(handModeShouldExit({ anyHandPresent: false, lostSince: 1000, now: 1180, seenHands: true }), true);
+});
+test('formato es: TRIM en dB, FILTRO LP/HP/Neutro y coma decimal', async () => {
+  const { fmtEs, fmtDb, fmtTrimDb, fmtPct, fmtTempo, fmtFilter, displayTrackName } = await import('../src/audio/format.js');
+  assert.equal(displayTrackName('Boiling_Energy_-_You_Are_Sick_Free_Download.mp3'), 'Boiling Energy – You Are Sick');
+  assert.equal(displayTrackName('MOJI, Jovynn - Rock It Up.mp3'), 'MOJI, Jovynn – Rock It Up');
+  assert.equal(displayTrackName('Demo A — House 122 BPM (generada)'), 'Demo A — House 122 BPM (generada)');
+  assert.equal(displayTrackName('mi_tema_final.WAV'), 'mi tema final');
+  assert.equal(fmtEs(-15.5), '−15,5'); assert.equal(fmtEs(154.14, 1), '154,1'); assert.equal(fmtEs(0), '0,0');
+  assert.equal(fmtDb(-8), '−8,0 dB'); assert.equal(fmtDb(2), '+2,0 dB'); assert.equal(fmtDb(0), '0,0 dB');
+  assert.equal(fmtTrimDb(1), '0,0 dB');
+  assert.equal(fmtTrimDb(1.37), '+2,7 dB');
+  assert.equal(fmtTrimDb(2), '+6,0 dB');
+  assert.equal(fmtTrimDb(0), '−∞ dB');
+  assert.equal(fmtTrimDb(0.5), '−6,0 dB');
+  assert.equal(fmtFilter(0), 'Neutro'); assert.equal(fmtFilter(2), 'Neutro'); assert.equal(fmtFilter(-2), 'Neutro');
+  assert.equal(fmtFilter(-25), 'LP 50 %'); assert.equal(fmtFilter(-50), 'LP 100 %');
+  assert.equal(fmtFilter(10), 'HP 20 %'); assert.equal(fmtFilter(50), 'HP 100 %');
+  assert.equal(fmtTempo(0), '+0,0 %'); assert.equal(fmtTempo(1.4), '+1,4 %'); assert.equal(fmtTempo(-0.4), '−0,4 %');
+  assert.equal(fmtPct(85), '85 %');
+});
+test('PISTAS gestual: cierre sin manos solo con gestos, cartel y cuenta atras', async () => {
+  const { pickerIdleState, pickerPointingText, pickerCountdownText } = await import('../src/audio/queue.js');
+  const t0 = 10000;
+  // Con manos presentes nunca se cierra, pase el tiempo que pase.
+  assert.equal(pickerIdleState({ open: true, gesturesOn: true, handsPresent: true, lastActivityAt: 0, now: t0 + 60000 }).state, 'open');
+  // Sin gestos activos (raton/teclado): tampoco se cierra.
+  assert.equal(pickerIdleState({ open: true, gesturesOn: false, handsPresent: false, lastActivityAt: 0, now: t0 + 60000 }).state, 'open');
+  // Sin manos y sin actividad: cuenta atras y cierre a los 7 s.
+  const cd = pickerIdleState({ open: true, gesturesOn: true, handsPresent: false, lastActivityAt: t0, now: t0 + 3000 });
+  assert.equal(cd.state, 'countdown'); assert.equal(cd.remainingMs, 4000);
+  assert.equal(pickerIdleState({ open: true, gesturesOn: true, handsPresent: false, lastActivityAt: t0, now: t0 + 7000 }).state, 'close');
+  // Actividad reciente de raton reinicia la cuenta (lastActivityAt fresca).
+  assert.equal(pickerIdleState({ open: true, gesturesOn: true, handsPresent: false, lastActivityAt: t0 + 6500, now: t0 + 7000 }).state, 'countdown');
+  // Selector cerrado: sin estado.
+  assert.equal(pickerIdleState({ open: false, gesturesOn: true, handsPresent: false, lastActivityAt: 0, now: 99999 }).state, 'open');
+  assert.equal(pickerPointingText('Demo A'), 'Apuntando: Demo A');
+  assert.match(pickerPointingText(null), /Sin mano/);
+  assert.equal(pickerCountdownText(3400), 'Se cerrará en 4 s sin manos');
 });
 test('preescucha: seleccion, persistencia y rechazo si coincide con la mezcla', async () => {
   const { normalizeOutputs, resolveSavedCue, cueBlockReason, cueStateText } = await import('../src/audio/cue-output.js');

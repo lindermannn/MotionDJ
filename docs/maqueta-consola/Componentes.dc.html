@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MotionDJ · Componentes y estados</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#07090c}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1280px; height: 860px; box-sizing: border-box; padding: 36px 44px; background: #0b0e12; color: #e8edf2; font-family: Inter, system-ui, sans-serif; display: flex; flex-direction: column; gap: 26px;">
+  <div style="display: flex; align-items: baseline; gap: 16px;">
+    <h1 style="margin: 0; font: 700 34px/1 'Barlow Condensed', sans-serif; letter-spacing: .04em;">COMPONENTES Y ESTADOS</h1>
+    <span style="font-size: 13px; color: #9aa6b2;">Todos con zona de pinza amplia · foco amarillo al apuntar · verde al tomar</span>
+  </div>
+
+  <section style="display: flex; flex-direction: column; gap: 12px;">
+    <h2 style="margin: 0; font: 700 15px/1 'Barlow Condensed', sans-serif; letter-spacing: .16em; color: #cfc8ff;">BOTÓN MANOS · FX (esquina inferior interior de cada deck)</h2>
+    <div style="display: flex; gap: 34px; align-items: flex-start;">
+      <sc-for list="{{fxStates}}" as="s" hint-placeholder-count="5">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; width: 130px;">
+          <button type="button" aria-label="{{s.aria}}" style="width: 92px; height: 92px; border-radius: 50%; border: 2px solid {{s.border}}; background: {{s.bg}}; box-shadow: {{s.shadow}}; color: {{s.color}}; transform: {{s.tf}}; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12"></path><path d="M11 11.5V4a1.5 1.5 0 0 1 3 0v7.5"></path><path d="M14 11.5V5.5a1.5 1.5 0 0 1 3 0V13"></path><path d="M17 12.5V9a1.5 1.5 0 0 1 3 0v5c0 4-3 7-7 7h-1.5c-2.2 0-3.8-1-5-2.7L3.4 15a1.6 1.6 0 0 1 2.4-2l2.2 2"></path></svg>
+          </button>
+          <span style="font: 700 12px/1 'Barlow Condensed', sans-serif; letter-spacing: .12em;">{{s.name}}</span>
+          <span style="font-size: 11px; color: #9aa6b2; text-align: center; line-height: 1.35;">{{s.note}}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px;">
+    <section style="display: flex; flex-direction: column; gap: 12px;">
+      <h2 style="margin: 0; font: 700 15px/1 'Barlow Condensed', sans-serif; letter-spacing: .16em; color: #aab5c0;">TRANSPORTE (esquina inferior exterior)</h2>
+      <div style="display: flex; gap: 22px; align-items: center;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+          <button type="button" aria-label="CUE" style="width: 74px; height: 74px; border-radius: 50%; border: 2px solid #3a434f; background: radial-gradient(circle at 50% 35%, #2b323c, #11151a 72%); box-shadow: 0 0 0 4px #07090c; color: #f5b13d; font: 700 16px/1 'Barlow Condensed', sans-serif; letter-spacing: .08em;">CUE</button>
+          <span style="font-size: 11px; color: #9aa6b2;">CUE</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+          <button type="button" aria-label="Play en pausa" style="width: 88px; height: 88px; border-radius: 50%; border: 2px solid #3a434f; background: radial-gradient(circle at 50% 35%, #2b323c, #10141a 72%); box-shadow: 0 0 0 4px #07090c; color: {{accentA}}; display: flex; align-items: center; justify-content: center;"><svg width="34" height="34" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5v14l9-7z" fill="currentColor"></path><rect x="14.5" y="5" width="2.6" height="14" rx="1" fill="currentColor"></rect><rect x="19" y="5" width="2.6" height="14" rx="1" fill="currentColor"></rect></svg></button>
+          <span style="font-size: 11px; color: #9aa6b2;">PLAY · en pausa</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+          <button type="button" aria-label="Play sonando A" style="width: 88px; height: 88px; border-radius: 50%; border: 2px solid {{accentA}}; background: radial-gradient(circle at 50% 35%, #2b323c, #10141a 72%); box-shadow: 0 0 0 4px #07090c, 0 0 22px {{accentA}}66; color: {{accentA}}; display: flex; align-items: center; justify-content: center;"><svg width="34" height="34" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5v14l9-7z" fill="currentColor"></path><rect x="14.5" y="5" width="2.6" height="14" rx="1" fill="currentColor"></rect><rect x="19" y="5" width="2.6" height="14" rx="1" fill="currentColor"></rect></svg></button>
+          <span style="font-size: 11px; color: #9aa6b2;">PLAY · sonando A</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+          <button type="button" aria-label="Play sonando B" style="width: 88px; height: 88px; border-radius: 50%; border: 2px solid {{accentB}}; background: radial-gradient(circle at 50% 35%, #2b323c, #10141a 72%); box-shadow: 0 0 0 4px #07090c, 0 0 22px {{accentB}}66; color: {{accentB}}; display: flex; align-items: center; justify-content: center;"><svg width="34" height="34" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5v14l9-7z" fill="currentColor"></path><rect x="14.5" y="5" width="2.6" height="14" rx="1" fill="currentColor"></rect><rect x="19" y="5" width="2.6" height="14" rx="1" fill="currentColor"></rect></svg></button>
+          <span style="font-size: 11px; color: #9aa6b2;">PLAY · sonando B</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <button type="button" style="width: 88px; height: 38px; border-radius: 10px; border: 1.5px solid {{accentA}}; background: #0f1419; color: {{accentA}}; font: 700 14px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; box-shadow: 0 0 10px {{accentA}}33;">SYNC</button>
+          <button type="button" style="width: 88px; height: 38px; border-radius: 10px; border: 1.5px solid #3a434f; background: #0f1419; color: #c9d3dc; font: 700 14px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em;">SYNC</button>
+          <span style="font-size: 11px; color: #9aa6b2;">activo / apagado</span>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 12px;">
+      <h2 style="margin: 0; font: 700 15px/1 'Barlow Condensed', sans-serif; letter-spacing: .16em; color: #aab5c0;">BIBLIOTECA Y PREESCUCHA</h2>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; align-items: center;">
+        <button type="button" style="height: 48px; padding: 0 16px; border-radius: 24px; border: 1px solid #2c3540; background: linear-gradient(180deg, #1b212a, #12171d); color: #e8edf2; display: inline-flex; align-items: center; gap: 9px; font: 700 14px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h11"></path><path d="M3 11h11"></path><path d="M3 16h7"></path><path d="M17 17.5V6.5l4-1.2"></path><circle cx="15" cy="17.5" r="2.2"></circle></svg>PISTAS</button>
+        <button type="button" style="height: 48px; padding: 0 16px; border-radius: 24px; border: 1px solid #2c3540; background: linear-gradient(180deg, #1b212a, #12171d); color: #e8edf2; display: inline-flex; align-items: center; gap: 9px; font: 700 14px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; box-shadow: 0 0 0 3px #facc15;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h11"></path><path d="M3 11h11"></path><path d="M3 16h7"></path><path d="M17 17.5V6.5l4-1.2"></path><circle cx="15" cy="17.5" r="2.2"></circle></svg>PISTAS · foco</button>
+        <button type="button" aria-pressed="false" style="height: 48px; padding: 0 16px; border-radius: 24px; border: 1px solid #2c3540; background: linear-gradient(180deg, #1b212a, #12171d); color: #e8edf2; display: inline-flex; align-items: center; gap: 9px; font: 700 14px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"></path><rect x="3" y="14" width="4.5" height="7" rx="1.6"></rect><rect x="16.5" y="14" width="4.5" height="7" rx="1.6"></rect></svg>PREESCUCHA</button>
+        <button type="button" aria-pressed="true" style="height: 48px; padding: 0 16px; border-radius: 24px; border: 1px solid {{accentB}}; background: linear-gradient(180deg, #2a1622, #170d14); color: #ffd1e6; display: inline-flex; align-items: center; gap: 9px; font: 700 14px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; box-shadow: 0 0 14px {{accentB}}44;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"></path><rect x="3" y="14" width="4.5" height="7" rx="1.6"></rect><rect x="16.5" y="14" width="4.5" height="7" rx="1.6"></rect></svg>PREESCUCHA · B</button>
+      </div>
+      <span style="font-size: 11px; color: #9aa6b2;">Preescucha encendida = el deck se oye en los auriculares, con el color de su deck.</span>
+    </section>
+  </div>
+
+  <div style="display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 0.9fr); gap: 30px;">
+    <section style="display: flex; flex-direction: column; gap: 12px;">
+      <h2 style="margin: 0; font: 700 15px/1 'Barlow Condensed', sans-serif; letter-spacing: .16em; color: #aab5c0;">PERILLA · REPOSO / FOCO / TOMADA</h2>
+      <div style="display: flex; gap: 24px;">
+        <sc-for list="{{knobStates}}" as="k" hint-placeholder-count="3">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+            <span style="position: relative; width: 58px; height: 58px; border-radius: 50%; background: {{k.ring}}; box-shadow: {{k.halo}}; display: block;">
+              <span style="position: absolute; inset: 5px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #3b4451, #151a21 70%); display: block;"></span>
+              <span style="position: absolute; left: 50%; top: 7px; width: 4px; height: 16px; margin-left: -2px; border-radius: 2px; background: #ffffff; box-shadow: 0 0 6px rgba(255,255,255,.55); transform-origin: 2px 22px; transform: rotate({{k.ang}}deg); display: block;"></span>
+            </span>
+            <span style="font: 700 11px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em;">LOW</span>
+            <span style="font-size: 10px; color: {{k.valColor}}; font-variant-numeric: tabular-nums;">{{k.val}}</span>
+            <span style="font-size: 11px; color: #9aa6b2;">{{k.name}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 12px;">
+      <h2 style="margin: 0; font: 700 15px/1 'Barlow Condensed', sans-serif; letter-spacing: .16em; color: #aab5c0;">PADS FIJOS</h2>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;">
+        <sc-for list="{{pads}}" as="p" hint-placeholder-count="6">
+          <button type="button" style="height: 50px; border-radius: 9px; border: 1.5px solid {{p.b}}; background: {{p.bg}}; box-shadow: {{p.glow}}; color: #dbe3ea; font: 700 12px/1.1 'Barlow Condensed', sans-serif; letter-spacing: .08em;">{{p.l}}</button>
+        </sc-for>
+      </div>
+      <span style="font-size: 11px; color: #9aa6b2;">Color por función: ámbar = cue, blanco = salto, violeta = efecto, verde = sonido.</span>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 10px;">
+      <h2 style="margin: 0; font: 700 15px/1 'Barlow Condensed', sans-serif; letter-spacing: .16em; color: #aab5c0;">PALETA</h2>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px;">
+        <sc-for list="{{palette}}" as="c" hint-placeholder-count="8">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 26px; height: 26px; border-radius: 7px; background: {{c.hex}}; border: 1px solid #2a323c; display: block;"></span>
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-size: 12px; font-weight: 600;">{{c.name}}</span>
+              <span style="font-size: 11px; color: #9aa6b2; font-variant-numeric: tabular-nums;">{{c.hex}}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accentA":{"editor":"color","default":"#22d3ee","options":["#22d3ee","#38bdf8","#2dd4bf"]},"accentB":{"editor":"color","default":"#ff4fa3","options":["#ff4fa3","#f472b6","#fb7185"]},"accentFx":{"editor":"color","default":"#9d8cff","options":["#9d8cff","#c4b5fd","#e2e8f0"]},"$preview":{"width":1280,"height":860}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const A = this.props.accentA ?? '#22d3ee';
+    const B = this.props.accentB ?? '#ff4fa3';
+    const F = this.props.accentFx ?? '#9d8cff';
+    const base = 'radial-gradient(circle at 50% 35%, #2c2a3f, #12111b 72%)';
+    const fxStates = [
+      { name: 'REPOSO', note: 'anillo tenue', aria: 'Manos FX en reposo', border: '#3d3a5c', bg: base, shadow: '0 0 0 5px #07090c', color: '#b9b0f5', tf: 'none' },
+      { name: 'FOCO', note: 'el dedo apunta: contorno amarillo', aria: 'Manos FX con foco', border: F, bg: base, shadow: '0 0 0 5px #07090c, 0 0 0 8px #facc15', color: F, tf: 'none' },
+      { name: 'PINZA', note: 'se hunde y destella', aria: 'Manos FX pulsado', border: F, bg: 'radial-gradient(circle at 50% 45%, #3a3560, #12111b 72%)', shadow: '0 0 0 5px #07090c, inset 0 0 18px ' + F + '88', color: '#ffffff', tf: 'scale(0.95)' },
+      { name: 'ACTIVO', note: 'anillo encendido, late al ritmo', aria: 'Manos FX activo', border: F, bg: base, shadow: '0 0 0 5px #07090c, 0 0 0 6px ' + F + '55, 0 0 30px ' + F + '99', color: F, tf: 'none' },
+      { name: 'NO DISPONIBLE', note: 'activa cámara y gestos', aria: 'Manos FX no disponible', border: '#2a2f38', bg: 'radial-gradient(circle at 50% 35%, #1a1d23, #0e1014 72%)', shadow: '0 0 0 5px #07090c', color: '#5b6472', tf: 'none' }
+    ];
+    const ring = (frac, c) => {
+      const ang = -135 + frac * 270, span = frac * 270;
+      return { ang: ang.toFixed(1), ring: 'conic-gradient(from 225deg, ' + c + ' 0deg ' + span + 'deg, transparent ' + span + 'deg 360deg), conic-gradient(from 225deg, #29313b 0deg 270deg, transparent 270deg 360deg)' };
+    };
+    const knobStates = [
+      Object.assign({ name: 'reposo', val: '−8 dB', valColor: '#8d99a6', halo: 'none' }, ring(0.5625, A)),
+      Object.assign({ name: 'foco', val: '−8 dB', valColor: '#facc15', halo: '0 0 0 3px #facc15' }, ring(0.5625, A)),
+      Object.assign({ name: 'tomada', val: '−3 dB', valColor: '#4ade80', halo: '0 0 0 3px #4ade80, 0 0 14px #4ade8066' }, ring(0.72, A))
+    ];
+    const pad = (l, col, set) => ({ l: l, b: set ? col : col + '66', bg: set ? 'rgba(245,177,61,.14)' : '#0f1318', glow: set ? '0 0 16px rgba(245,177,61,.35)' : 'none' });
+    return {
+      accentA: A, accentB: B, accentFx: F,
+      fxStates: fxStates,
+      knobStates: knobStates,
+      pads: [pad('CUE 1', '#f5b13d', false), pad('CUE 1 · 0:42', '#f5b13d', true), pad('◀ SALTO', '#cbd5e1', false), pad('FX FILTRO', F, false), pad('FX ECO', F, false), pad('SONIDO 1', '#34d399', false)],
+      palette: [
+        { name: 'Fondo', hex: '#07090C' }, { name: 'Panel', hex: '#181D25' },
+        { name: 'Deck A', hex: A.toUpperCase() }, { name: 'Deck B', hex: B.toUpperCase() },
+        { name: 'Efecto (manos)', hex: F.toUpperCase() }, { name: 'CUE', hex: '#F5B13D' },
+        { name: 'Foco', hex: '#FACC15' }, { name: 'Tomado', hex: '#4ADE80' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
