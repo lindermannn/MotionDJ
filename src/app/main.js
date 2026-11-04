@@ -150,7 +150,10 @@ function ensureEngine() {
 window.addEventListener('error', e => { const s = $('#status'); if (s) s.textContent = `Algo falló (${(e.message || 'error').slice(0, 90)}). La música y los controles siguen: si se repite, anota qué estabas haciendo.`; });
 $('#gAudio').onclick = ensureEngine;
 function drawWave(d) {
-  const cv = d.el.querySelector('.wave'), ctx = cv.getContext('2d');
+  const cv = d.el.querySelector('.wave');
+  if (document.body.dataset.holo === '1' && d.peaks && d.track) { drawHoloOverview(d, cv); return; }
+  if (cv.width !== 480) { cv.width = 480; cv.height = 88; }
+  const ctx = cv.getContext('2d');
   ctx.clearRect(0, 0, cv.width, cv.height); ctx.fillStyle = d.name === 'A' ? '#22d3ee' : '#f472b6';
   if (!d.peaks) { ctx.fillStyle = '#33505c'; ctx.fillRect(0, 42, cv.width, 2); return; }
   const pos = engine && d.track ? engine.decks[decks.indexOf(d)].position() / d.track.buffer.duration : 0;
@@ -173,6 +176,8 @@ function drawWave(d) {
 // con la rejilla nitida. Solo visualizacion: no corrige nada.
 function drawZoomWave(d) {
   const cv = d.el.querySelector('.zoomwave'); if (!cv || !engine || !d.track || !d.peaksZoom) return;
+  if (document.body.dataset.holo === '1') { drawHoloWave(d, cv); return; }
+  if (cv.width !== 480) { cv.width = 480; cv.height = 54; }
   const ctx = cv.getContext('2d'), pos = engine.decks[decks.indexOf(d)].position(), dur = d.track.buffer.duration;
   const winSec = Number(d.el.querySelector('.zoomwin')?.value || 8);
   const { start, end, frac } = zoomWindow(pos, dur, winSec);
@@ -196,6 +201,88 @@ function drawZoomWave(d) {
   }
   (d.hotcues || []).forEach(h => { if (h !== null && h >= start && h <= end) { ctx.fillStyle = '#facc15'; ctx.fillRect((h - start) / (end - start) * cv.width, 0, 2, 10); } });
   ctx.fillStyle = '#fff'; ctx.fillRect(frac * cv.width, 0, 2, cv.height);
+}
+// Onda de la mesa 3D, al estilo del software de DJ: el cabezal queda fijo en
+// el centro y la onda pasa por debajo; espejada desde la linea media, con un
+// nucleo claro. Usa energia (RMS) en bloques cortos, normalizada al p98 de la
+// pista y con curva de contraste, para que se vean los bombos y los cortes
+// aunque el tema este masterizado muy fuerte. Se calcula una vez por pista.
+const HOLO_RATE = 150; // bloques por segundo
+function holoEnergy(d) {
+  if (d._holoE && d._holoE.track === d.track) return d._holoE;
+  const buf = d.track.buffer, c0 = buf.getChannelData(0), c1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : c0;
+  const n = Math.max(1, Math.floor(buf.duration * HOLO_RATE)), block = Math.max(1, Math.floor(c0.length / n));
+  const e = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let s = 0, k = 0; const off = i * block;
+    for (let j = 0; j < block; j += 4) { const v = (c0[off + j] + c1[off + j]) * 0.5 || 0; s += v * v; k++; }
+    e[i] = Math.sqrt(s / Math.max(1, k));
+  }
+  const sorted = Float32Array.from(e).sort(), ref = sorted[Math.floor(sorted.length * 0.98)] || 1;
+  for (let i = 0; i < n; i++) e[i] = Math.pow(Math.min(1, e[i] / ref), 1.6);
+  d._holoE = { track: d.track, e };
+  return d._holoE;
+}
+function drawHoloWave(d, cv) {
+  if (cv.width !== 960 || cv.height !== 72) { cv.width = 960; cv.height = 72; }
+  const ctx = cv.getContext('2d'), W = cv.width, H = cv.height, mid = H / 2;
+  const pos = engine.decks[decks.indexOf(d)].position(), dur = d.track.buffer.duration;
+  const winSec = 8, start = pos - winSec / 2, pxPerSec = W / winSec;
+  const { e } = holoEnergy(d), n = e.length;
+  const col = d.name === 'A' ? [34, 211, 238] : [255, 79, 163];
+  ctx.clearRect(0, 0, W, H);
+  if (d.loop) { ctx.fillStyle = 'rgba(74,222,128,.16)'; ctx.fillRect((d.loop.start - start) * pxPerSec, 0, d.loop.len * pxPerSec, H); }
+  // Rejilla suave detras de la onda (compases mas marcados).
+  if (d.grid?.bpm && d.grid.firstBeat != null) {
+    const beat = 60 / d.grid.bpm, k0 = Math.ceil((start - d.grid.firstBeat) / beat);
+    for (let k = k0; ; k++) {
+      const tt = d.grid.firstBeat + k * beat; if (tt > start + winSec) break;
+      const strong = ((k % 4) + 4) % 4 === 0;
+      ctx.fillStyle = strong ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.08)';
+      ctx.fillRect(Math.round((tt - start) * pxPerSec), 0, strong ? 2 : 1, H);
+    }
+  }
+  const half = mid - 4, cx = W / 2;
+  for (let x = 0; x < W; x += 2) {
+    const t = start + x / pxPerSec; if (t < 0 || t >= dur) continue;
+    const i = Math.min(n - 1, Math.floor(t * HOLO_RATE));
+    const v = Math.max(e[i], e[Math.min(n - 1, i + 1)]), h = Math.max(1, v * half);
+    const played = x < cx;
+    ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${played ? 0.5 : 0.95})`;
+    ctx.fillRect(x, mid - h, 2, h * 2);
+    if (v > 0.12) { ctx.fillStyle = played ? 'rgba(255,255,255,.35)' : 'rgba(255,255,255,.85)'; const c = h * 0.42; ctx.fillRect(x, mid - c, 2, c * 2); }
+  }
+  (d.hotcues || []).forEach(h => { if (h !== null && h >= start && h <= start + winSec) { ctx.fillStyle = '#facc15'; ctx.fillRect((h - start) * pxPerSec - 1, 0, 3, 16); } });
+  // Cabezal fijo en el centro.
+  ctx.fillStyle = '#fff'; ctx.fillRect(cx - 1, 0, 3, H);
+  ctx.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`; ctx.beginPath(); ctx.moveTo(cx - 8, 0); ctx.lineTo(cx + 9, 0); ctx.lineTo(cx + 0.5, 10); ctx.fill();
+}
+// Vista general de la mesa 3D: la cancion entera, en grande. Sin rejilla
+// (cientos de lineas blancas tapaban la forma); energia media por columna con
+// contraste propio, para que los drops y los breaks se distingan.
+function drawHoloOverview(d, cv) {
+  if (cv.width !== 960 || cv.height !== 192) { cv.width = 960; cv.height = 192; }
+  const ctx = cv.getContext('2d'), W = cv.width, H = cv.height, mid = H / 2;
+  if (!d._holoOv || d._holoOv.track !== d.track) {
+    const { e } = holoEnergy(d), n = e.length, cols = W / 2, v = new Float32Array(cols);
+    for (let c = 0; c < cols; c++) {
+      const a = Math.floor(c / cols * n), b = Math.max(a + 1, Math.floor((c + 1) / cols * n));
+      let s = 0; for (let i = a; i < b && i < n; i++) s += e[i]; v[c] = s / Math.max(1, b - a);
+    }
+    const sorted = Float32Array.from(v).sort(), lo = sorted[Math.floor(cols * 0.05)], hi = sorted[Math.floor(cols * 0.98)] || 1;
+    for (let c = 0; c < cols; c++) v[c] = Math.pow(Math.min(1, Math.max(0, (v[c] - lo * 0.6) / Math.max(1e-6, hi - lo * 0.6))), 1.4);
+    d._holoOv = { track: d.track, v };
+  }
+  const { v } = d._holoOv, col = d.name === 'A' ? '34,211,238' : '255,79,163';
+  const pos = engine ? engine.decks[decks.indexOf(d)].position() / d.track.buffer.duration : 0, px = pos * W;
+  ctx.clearRect(0, 0, W, H);
+  for (let c = 0; c < v.length; c++) {
+    const x = c * 2, h = Math.max(1, v[c] * (mid - 1));
+    ctx.fillStyle = `rgba(${col},${x < px ? 0.35 : 0.95})`;
+    ctx.fillRect(x, mid - h, 2, h * 2);
+  }
+  (d.hotcues || []).forEach(h => { if (h !== null) { ctx.fillStyle = '#facc15'; ctx.fillRect(h / d.track.buffer.duration * W - 1, 0, 3, H); } });
+  ctx.fillStyle = '#fff'; ctx.fillRect(px - 1, 0, 3, H);
 }
 // Espectro por deck (P2): usa el AnalyserNode del canal, color del deck,
 // buffer reutilizado. Sustituye a la franja de espectro del master.
@@ -1876,9 +1963,26 @@ function fitConsole() {
   consoleEl.style.transform = prev;
   applyCal(false);
 }
+// ---------- Mesa holografica 3D (prueba, apagada por defecto) ----------
+var holo = { on: false, angle: 20 }; // var: applyCal puede correr antes de esta linea
+try { const h = JSON.parse(localStorage.getItem('motiondj-3d') || 'null'); if (h) { holo.on = !!h.on; holo.angle = Math.min(40, Math.max(5, Number(h.angle) || 20)); } } catch { /* valor corrupto: 3D apagado */ }
+function applyHolo(save = true) {
+  document.body.dataset.holo = holo.on ? '1' : '0';
+  const b = $('#btn3d'); if (b) { b.setAttribute('aria-pressed', String(holo.on)); b.textContent = holo.on ? '3D: ON' : '3D'; }
+  const c = $('#cal3d'); if (c) c.checked = holo.on;
+  const a = $('#cal3dAngle'); if (a) a.value = holo.angle;
+  const v = $('#cal3dVal'); if (v) v.textContent = holo.angle;
+  if (save) localStorage.setItem('motiondj-3d', JSON.stringify(holo));
+  if (typeof applyCal === 'function') applyCal(false);
+  requestAnimationFrame(() => { if (typeof hands !== 'undefined') hands.forEach(h => { h.smoothX.reset(); h.smoothY.reset(); }); if (typeof rebuildRegistry === 'function') rebuildRegistry(); });
+}
 function applyCal(save = true) {
   const s = $('#calScale').value, x = $('#calX').value, y = $('#calY').value;
-  consoleEl.style.transform = `translateX(calc(-50% + ${x}px)) scale(${s * consoleFit})`;
+  // Mesa holografica 3D (prueba): la inclinacion va al final del transform.
+  // Los gestos siguen sirviendo porque rebuildRegistry usa getBoundingClientRect,
+  // que ya devuelve la caja proyectada de cada control.
+  const tilt = holo && holo.on && window.innerWidth > 640 ? ` rotateX(${holo.angle}deg)` : '';
+  consoleEl.style.transform = `translateX(calc(-50% + ${x}px)) scale(${s * consoleFit})${tilt}`;
   consoleEl.style.bottom = `calc(3% + ${-y}px)`;
   document.documentElement.style.setProperty('--ctl', $('#calSize').value);
   document.documentElement.style.setProperty('--alpha', $('#calOpacity')?.value || 0.86);
@@ -1911,6 +2015,10 @@ function setView(v) { requestAnimationFrame(() => { if (typeof hands !== 'undefi
 }
 $('#btnViewEasy').onclick = () => setView('easy'); $('#btnViewDJ').onclick = () => setView('dj');
 setView(localStorage.getItem('motiondj-view') || 'dj');
+$('#btn3d').onclick = () => { holo.on = !holo.on; applyHolo(); };
+$('#cal3d').onchange = e => { holo.on = e.target.checked; applyHolo(); };
+$('#cal3dAngle').oninput = e => { holo.angle = Number(e.target.value); applyHolo(); };
+applyHolo(false);
 applyCal(false);
 let locked = false;
 $('#btnReset').onclick = () => resetAll();

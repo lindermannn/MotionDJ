@@ -610,3 +610,63 @@ body.lib-expanded .track-list{max-height:72vh}body.lib-expanded .lib-queues ol{m
 .ug-body th{background:#0d2434}
 .ug-body kbd{background:#102a38;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:12px}
 @media (max-width:600px){.ug-body{padding:4px 14px 16px}.ug-head{padding:10px 12px}}
+
+/* ---------- Mesa holografica 3D (prueba; body[data-holo="1"]) ----------
+   Estilo de docs/referencia-conceptual.png: vidrio casi transparente, bordes
+   de neon (A cian, B magenta), jogs con anillo de marcas y particulas. Solo
+   cambia el aspecto: el hit-test sigue usando getBoundingClientRect. */
+body[data-holo="1"]{--ha:34,211,238;--hb:255,79,163}
+body[data-holo="1"] .stage{perspective:1100px;perspective-origin:50% 0%}
+body[data-holo="1"] .console{transition:transform .35s ease}
+/* Paneles de vidrio */
+body[data-holo="1"] .deck,body[data-holo="1"] .mixer{background:linear-gradient(165deg,rgba(150,230,255,.10),rgba(6,17,25,calc(var(--alpha) * .38)) 45%,rgba(6,17,25,calc(var(--alpha) * .3)));backdrop-filter:none;border-radius:20px;border-width:1.5px}
+body[data-holo="1"] .deck-a{border-color:rgba(var(--ha),.9);box-shadow:0 0 28px rgba(var(--ha),.45),inset 0 0 26px rgba(var(--ha),.14),inset 0 1px 0 rgba(255,255,255,.35)}
+body[data-holo="1"] .deck-b{border-color:rgba(var(--hb),.9);box-shadow:0 0 28px rgba(var(--hb),.45),inset 0 0 26px rgba(var(--hb),.14),inset 0 1px 0 rgba(255,255,255,.35)}
+body[data-holo="1"] .mixer{border-color:rgba(190,240,255,.55);box-shadow:0 0 22px rgba(160,220,255,.22),inset 0 0 22px rgba(160,220,255,.08),inset 0 1px 0 rgba(255,255,255,.3)}
+body[data-holo="1"] .deck-head h3{text-shadow:0 0 10px currentColor}
+body[data-holo="1"] .deck-a .deck-head h3{color:#bff6ff}
+body[data-holo="1"] .deck-b .deck-head h3{color:#ffd1e8}
+/* Ondas y espectros: sin fondo, con brillo */
+body[data-holo="1"] .wave,body[data-holo="1"] .deckspec{background:transparent;border-color:transparent}
+body[data-holo="1"] .deck-a .zoomwave{filter:drop-shadow(0 0 2px rgba(var(--ha),.8))}
+body[data-holo="1"] .deck-b .zoomwave{filter:drop-shadow(0 0 2px rgba(var(--hb),.8))}
+/* Jogs: vinilo translucido con aro de neon y anillo de marcas */
+body[data-holo="1"] .jog{background:radial-gradient(circle,rgba(0,0,0,.35) 0 30%,transparent 31%),repeating-radial-gradient(circle at 50% 50%,rgba(255,255,255,.05) 0 1px,rgba(10,20,29,.35) 1px 4px);border-width:3px}
+body[data-holo="1"] .deck-a .jog{border-color:rgb(var(--ha));box-shadow:0 0 26px rgba(var(--ha),.8),0 0 70px rgba(var(--ha),.3),inset 0 0 30px rgba(var(--ha),.35)}
+body[data-holo="1"] .deck-b .jog{border-color:rgb(var(--hb));box-shadow:0 0 26px rgba(var(--hb),.8),0 0 70px rgba(var(--hb),.3),inset 0 0 30px rgba(var(--hb),.35)}
+body[data-holo="1"] .jog::after{background:radial-gradient(circle,rgba(6,13,20,.6) 0 40%,transparent 42%);border:4px solid rgba(255,255,255,.75);box-shadow:0 0 14px currentColor}
+body[data-holo="1"] .deck-a .jog::after{border-color:rgb(var(--ha));box-shadow:0 0 16px rgba(var(--ha),.9),inset 0 0 10px rgba(var(--ha),.6)}
+body[data-holo="1"] .deck-b .jog::after{border-color:rgb(var(--hb));box-shadow:0 0 16px rgba(var(--hb),.9),inset 0 0 10px rgba(var(--hb),.6)}
+body[data-holo="1"] .jogwrap::before{content:"";position:absolute;inset:-12px;border-radius:50%;pointer-events:none;background:repeating-conic-gradient(rgba(var(--ha),.85) 0 1.1deg,transparent 1.1deg 5deg);-webkit-mask:radial-gradient(circle,transparent 66%,#000 67%,#000 71%,transparent 72%);mask:radial-gradient(circle,transparent 66%,#000 67%,#000 71%,transparent 72%)}
+body[data-holo="1"] .deck-b .jogwrap::before{background:repeating-conic-gradient(rgba(var(--hb),.85) 0 1.1deg,transparent 1.1deg 5deg)}
+/* Perillas, pads y botones con contorno de neon */
+body[data-holo="1"] .knob{background:radial-gradient(circle at 38% 30%,rgba(60,80,100,.75),rgba(8,14,20,.85) 70%);border-color:rgba(190,240,255,.45);box-shadow:0 0 12px rgba(160,220,255,.25)}
+body[data-holo="1"] .pad{background:rgba(255,255,255,.03);border-radius:999px;border-width:1.5px;box-shadow:0 0 10px rgba(var(--ha),.25),inset 0 0 8px rgba(var(--ha),.12)}
+body[data-holo="1"] .deck-b .pad{box-shadow:0 0 10px rgba(var(--hb),.25),inset 0 0 8px rgba(var(--hb),.12)}
+body[data-holo="1"] .pad:active,body[data-holo="1"] .pad.hit{background:rgba(255,255,255,.22);box-shadow:0 0 18px #fff}
+body[data-holo="1"] .deck .btn,body[data-holo="1"] .mixer .btn{background:rgba(255,255,255,.04);box-shadow:0 0 8px rgba(160,220,255,.15)}
+body[data-holo="1"] #cross::-webkit-slider-runnable-track{box-shadow:0 0 14px rgba(var(--ha),.6),0 0 14px rgba(var(--hb),.6);border-color:transparent}
+body[data-holo="1"] #cross::-webkit-slider-thumb{background:rgba(255,255,255,.9);border-color:#fff;box-shadow:0 0 16px #fff,0 0 30px rgb(var(--ha))}
+/* Particulas que suben de las esquinas superiores (decorativas) */
+body[data-holo="1"] .console::before,body[data-holo="1"] .console::after{content:"";position:absolute;top:-70px;width:22%;height:110px;pointer-events:none;opacity:.85;background-repeat:no-repeat;animation:holoDust 3.2s linear infinite}
+body[data-holo="1"] .console::before{left:3%;background-image:radial-gradient(circle,rgba(var(--ha),1) 0 2.5px,transparent 4.5px),radial-gradient(circle,rgba(var(--ha),.8) 0 1.8px,transparent 3.5px),radial-gradient(circle,rgba(var(--ha),.9) 0 3px,transparent 5px),radial-gradient(circle,rgba(var(--ha),.7) 0 1.8px,transparent 3.5px),radial-gradient(circle,rgba(var(--ha),.9) 0 2.5px,transparent 4.5px);background-size:14px 14px;filter:drop-shadow(0 0 4px #fff);background-position:10% 80%,30% 40%,55% 65%,75% 20%,90% 55%}
+body[data-holo="1"] .console::after{right:3%;animation-delay:-1.6s;background-image:radial-gradient(circle,rgba(var(--hb),1) 0 2.5px,transparent 4.5px),radial-gradient(circle,rgba(var(--hb),.8) 0 1.8px,transparent 3.5px),radial-gradient(circle,rgba(var(--hb),.9) 0 3px,transparent 5px),radial-gradient(circle,rgba(var(--hb),.7) 0 1.8px,transparent 3.5px),radial-gradient(circle,rgba(var(--hb),.9) 0 2.5px,transparent 4.5px);background-size:14px 14px;filter:drop-shadow(0 0 4px #fff);background-position:15% 50%,35% 85%,50% 25%,70% 70%,88% 35%}
+@keyframes holoDust{0%{transform:translateY(20px);opacity:0}25%{opacity:.9}100%{transform:translateY(-40px);opacity:0}}
+@media (prefers-reduced-motion:reduce){body[data-holo="1"] .console::before,body[data-holo="1"] .console::after{animation:none}}
+/* Mesa 3D compacta: sin Avanzado ni onda ampliada; AUTO DJ y MEZCLAR a los
+   lados del crossfader; la onda principal crece (superficie vistosa). */
+body[data-holo="1"] .mixer .avanzado,body[data-holo="1"] .deck .zoomtag,body[data-holo="1"] .deck .zoomwin,body[data-holo="1"] .deck .gridstate{display:none!important}
+/* Vista general (cancion completa): grande, es la zona para saltar/arrastrar. Onda ampliada: tira fina debajo. */
+body[data-holo="1"] .deck .wave{height:88px;margin-top:6px}
+body[data-holo="1"] .deck .zoomwrap{margin-top:4px}
+body[data-holo="1"] .deck .zoomwave{display:block;width:100%;height:30px;background:transparent;border-color:transparent}
+body[data-holo="1"] .deckspec{mix-blend-mode:screen}
+body[data-holo="1"] .mixer{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-auto-flow:row dense;column-gap:8px;align-content:start}
+body[data-holo="1"] .mixer>*{grid-column:1/-1}
+body[data-holo="1"] .mixer>.crossbox{grid-column:2}
+body[data-holo="1"] .mixer .crossbox #cross,body[data-holo="1"] .mixer .crossbox .row{width:100%}
+body[data-holo="1"] .mixer>.autodj-row{display:contents}
+body[data-holo="1"] .autodj-row>.autodj-toggle{grid-column:1;align-self:center;margin-top:10px}
+body[data-holo="1"] .autodj-row>#btnAutoDjNow{grid-column:3;align-self:center;margin-top:10px}
+body[data-holo="1"] .autodj-row>#btnEasyMix{grid-column:1/-1;justify-self:center;margin-top:6px}
+#btn3d[aria-pressed="true"]{background:#155e75;border-color:var(--a)}
