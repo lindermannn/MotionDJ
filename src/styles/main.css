@@ -68,6 +68,9 @@ body[data-view="easy"] .gridrow,body[data-view="easy"] .zoomwrap-easy,body[data-
 .avanzado summary{cursor:pointer;color:#a9c6cd}
 .faderow{display:flex;justify-content:space-around;align-items:flex-end;margin-top:8px;text-align:center;font-size:10px;color:#a9c6cd}
 .crossbox{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+/* Crossfader a media anchura: con la mano, de A a B es la mitad de recorrido */
+.crossbox #cross,.crossbox .row{width:50%;margin-left:auto;margin-right:auto}
+.crossbox #cross{display:block}
 .pads{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:8px}
 .pad{height:38px;border-radius:6px;border:1px solid var(--line);background:#122a38;color:var(--ink);cursor:pointer;font-size:10px}
 .pad.set{border-color:#facc15}.pad:active,.pad.hit{background:#365a6e}.pad:disabled{opacity:.35}
@@ -265,7 +268,7 @@ body.handmode .layout,body.handmode .guide,body.handmode .spectrum-wrap,body.han
 .handmode-bar{flex-wrap:nowrap;max-width:min(96%,1180px)}
 .hm-titlewrap{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 auto}
 .hm-titlewrap strong{white-space:nowrap}
-.hm-help{font-size:12px;color:#c9c3ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hm-help{font-size:12px;color:#c9c3ea;white-space:normal;overflow:visible;line-height:1.3;max-width:520px}
 .hm-toggles{display:flex;gap:8px;flex:none}
 .hm-toggle{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:16px;border:1px solid #3b3760;color:#d8d2f2;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;background:rgba(20,16,48,.7)}
 .hm-toggle:has(input:checked){border-color:var(--fxviolet);background:#221d44;color:#fff}
@@ -304,6 +307,133 @@ body.handmode .layout,body.handmode .guide,body.handmode .spectrum-wrap,body.han
 .cursor{z-index:5}
 .handmode-bar{z-index:16}
 @media(prefers-reduced-motion:reduce){.arc-glow{filter:blur(4px)}}
+/* ===== ECO (4B): selector, anillos, medidor y lanzamiento ===== */
+.hm-selector{display:flex;gap:6px;padding-left:12px;border-left:1px solid #3b3760;flex:none}
+.hm-sel{height:32px;padding:0 12px;border-radius:16px;border:1px solid #3b3760;background:transparent;color:#a9a3cf;font:600 12px Inter,sans-serif;cursor:pointer;white-space:nowrap}
+.hm-sel.on{border-color:var(--fxviolet);background:#221d44;color:#fff;font-weight:700}
+.hm-extras{display:flex;gap:8px}
+.hm-extras[hidden]{display:none!important}
+.eco-arrow{fill:none;stroke:#e4defc;stroke-width:3;stroke-dasharray:10 9;opacity:.85}
+.eco-meter{position:absolute;left:118px;top:170px;z-index:16;width:64px;display:flex;flex-direction:column;align-items:center;gap:8px;color:#cfc8ff;font:700 11px Inter,sans-serif;letter-spacing:.06em;text-align:center}
+.eco-meter[hidden]{display:none!important}
+.eco-meter .eco-track{position:relative;width:10px;height:300px;border-radius:5px;background:#1b2029;display:block}
+.eco-meter .eco-track i{position:absolute;left:0;right:0;bottom:0;height:0;border-radius:5px;background:linear-gradient(0deg,#164e63,var(--a));display:block}
+.eco-meter .eco-track b{position:absolute;left:-9px;bottom:0;width:28px;height:4px;margin-bottom:-2px;border-radius:2px;background:#fff;box-shadow:0 0 8px #fff;display:block}
+.eco-meter small{font:400 11px/1.35 Inter,sans-serif;color:#9aa6b2;letter-spacing:0;width:120px}
+.eco-hint{position:absolute;z-index:16;padding:6px 12px;border-radius:12px;font-size:13px;font-weight:600;white-space:nowrap;pointer-events:none}
+.eco-hint[hidden]{display:none!important}
+.eco-hint-throw{left:56%;top:36%;background:rgba(12,10,28,.88);border:1px solid rgba(157,140,255,.55);color:#e4defc}
+.eco-hint-cancel{left:66%;top:56%;background:rgba(5,10,16,.8);border:1px solid #3a434f;color:#9aa6b2;font-size:12px;font-weight:400}
+.gesture-intro{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);z-index:16;width:min(88%,860px);padding:28px 30px 20px;border-radius:22px;background:rgba(10,12,18,.9);border:1px solid #343a52;box-shadow:0 20px 60px rgba(0,0,0,.5);text-align:center;pointer-events:none}
+.gesture-intro[hidden]{display:none!important}
+.gesture-intro h2{font:700 28px/1 "Barlow Condensed",sans-serif;letter-spacing:.07em;margin:0 0 8px}
+.gesture-intro p{color:#a9b3be;font-size:14px;margin:0}
+.gesture-cards{display:flex;gap:18px;justify-content:center;margin:24px 0 18px}
+.gesture-cards>div{flex:1;max-width:320px;display:flex;flex-direction:column;gap:6px;align-items:center;padding:18px 12px;border:1px solid #252d37;border-radius:14px}
+.gesture-cards strong{font:700 24px/1 "Barlow Condensed",sans-serif;letter-spacing:.1em}
+.gesture-cards .g-fx{color:var(--fxviolet)}
+.gesture-cards .g-eco{color:var(--a)}
+.gesture-cards span{font-size:14px;font-weight:600}
+.gesture-cards small{font-size:12px;color:#9aa6b2}
+.gesture-intro .gesture-foot{font-size:12px;color:#7d8794}
+.eco-notice{position:absolute;left:50%;top:118px;transform:translateX(-50%);z-index:17;padding:10px 22px;border-radius:12px;background:rgba(5,10,16,.92);font-size:18px;font-weight:700;white-space:nowrap;pointer-events:none}
+.eco-notice[hidden]{display:none!important}
+.eco-notice.ok{border:2px solid #34d399;color:#a7f3d0}
+.eco-notice.cancel{border:2px solid #facc15;color:#fde68a}
+.eco-launchfx{position:absolute;left:50%;bottom:104px;transform:translateX(-50%);z-index:16;display:flex;gap:22px;align-items:flex-end;padding:12px 18px;border-radius:14px;background:rgba(8,11,15,.88);border:1px solid #252d37;white-space:nowrap}
+.eco-launchfx[hidden]{display:none!important}
+.eco-launchfx small{font:700 11px Inter,sans-serif;color:#9aa6b2;letter-spacing:.08em}
+.eco-tail{display:flex;flex-direction:column;gap:6px}
+.eco-bars{display:flex;align-items:flex-end;gap:4px;height:28px}
+.eco-bars i{width:10px;border-radius:2px;background:var(--a);display:block}
+.eco-cross{display:flex;flex-direction:column;gap:6px;border-left:1px solid #252d37;padding-left:18px}
+.eco-crossbar{display:flex;align-items:center;gap:8px;font:700 13px "Barlow Condensed",sans-serif}
+.eco-crossbar>span{position:relative;width:200px;height:8px;border-radius:4px;background:linear-gradient(90deg,rgba(34,211,238,.4),#2a323c 45%,#2a323c 55%,#ff4fa3);display:block}
+.eco-crossbar i{position:absolute;top:50%;left:0;width:14px;height:26px;margin:-13px 0 0 -7px;border-radius:4px;background:linear-gradient(90deg,#4b5563,#2a313b);border:1px solid #5b6674;display:block}
+.hm-targetcard{left:auto;right:24px;justify-content:flex-end;text-align:right}
+.hm-targetcard[hidden]{display:none!important}
+.hm-targetcard.hot{border:2px solid var(--b);box-shadow:0 0 20px rgba(255,79,163,.35);background:rgba(26,10,20,.9)}
+@media(max-width:1100px){.eco-meter{display:none!important}.eco-hint-cancel{display:none!important}}
+/* ===== Encargo 4C: ROLL (verde) y FRENO (ambar) ===== */
+:root{--roll:#4ADE80;--brake:#F5B13D}
+.hm-sel-roll.on{border-color:var(--roll);background:rgba(74,222,128,.16);color:#dcfce7;box-shadow:0 0 12px rgba(74,222,128,.35)}
+.hm-sel-brake.on{border-color:var(--brake);background:rgba(245,177,61,.16);color:#fef3c7;box-shadow:0 0 12px rgba(245,177,61,.35)}
+#fxSelEco.on{border-color:var(--a);background:rgba(34,211,238,.14)}
+.gesture-cards .g-roll{color:var(--roll)}
+.gesture-cards .g-brake{color:var(--brake)}
+.gesture-intro{width:min(92%,1100px)}
+.roll-badge{position:absolute;z-index:16;width:68px;height:68px;border-radius:50%;background:var(--roll);color:#061218;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 22px rgba(74,222,128,.5)}
+.roll-badge[hidden]{display:none!important}
+.roll-badge strong{font:700 30px/0.9 "Barlow Condensed",sans-serif}
+.roll-badge span{font-size:10px;font-weight:700}
+.fx-sidepanel{position:absolute;z-index:16;border-radius:16px;background:rgba(8,11,15,.88);border:1px solid #252d37;padding:16px;color:#e8edf2}
+.fx-sidepanel[hidden]{display:none!important}
+.fx-sidepanel h3{margin:0 0 10px;font-size:11px;letter-spacing:.08em;color:#9aa6b2}
+.fx-sidepanel p{font-size:11px;line-height:1.4;color:#9aa6b2;margin:10px 0 0}
+.roll-panel{right:24px;top:120px;width:min(350px,42vw)}
+.roll-opt{border:1px solid #252d37;border-radius:12px;padding:10px 14px;margin-top:8px;display:flex;flex-direction:column;gap:3px}
+.roll-opt strong{font:700 19px/1 "Barlow Condensed",sans-serif;letter-spacing:.05em}
+.roll-opt span{font-size:12px;color:#9aa6b2}
+.roll-opt.on{border:2px solid var(--roll);background:rgba(74,222,128,.1);box-shadow:0 0 16px rgba(74,222,128,.25)}
+.roll-opt.on strong{color:var(--roll)}
+.roll-wave{left:50%;top:auto;bottom:96px;transform:translateX(-50%);width:370px}
+.roll-wave canvas,.brake-panel canvas{display:block;width:100%;height:auto;background:#0a0f14;border-radius:8px}
+.brake-meter{position:absolute;left:34px;top:170px;z-index:16;width:64px;display:flex;flex-direction:column;align-items:center;gap:8px;color:#cfc8ff;font:700 11px Inter,sans-serif;letter-spacing:.06em;text-align:center}
+.brake-meter[hidden]{display:none!important}
+.brake-meter .brake-track{position:relative;width:10px;height:280px;border-radius:5px;background:#1b2029;display:block}
+.brake-meter .brake-track i{position:absolute;left:0;right:0;bottom:0;height:0;border-radius:5px;background:linear-gradient(0deg,rgba(245,177,61,.4),var(--brake));display:block}
+.brake-meter .brake-track b{position:absolute;left:-9px;bottom:0;width:28px;height:4px;margin-bottom:-2px;border-radius:2px;background:#fff;box-shadow:0 0 8px #fff;display:block}
+.brake-meter small{font:400 11px/1.35 Inter,sans-serif;color:#9aa6b2;letter-spacing:0;width:120px}
+.brake-panel{right:24px;top:150px;width:min(320px,40vw)}
+.brake-speed{display:flex;flex-direction:column;gap:5px;margin-top:12px;border-top:1px solid #252d37;padding-top:10px;font-size:11px;color:#9aa6b2}
+.brake-speed strong{font:700 18px/1 "Barlow Condensed",sans-serif;color:var(--brake)}
+.brake-speedbar{height:10px;border-radius:5px;background:#1b2029;display:block;overflow:hidden}
+.brake-speedbar i{display:block;height:100%;width:100%;background:var(--brake)}
+.brake-hint{left:50%;top:118px;transform:translateX(-50%);background:rgba(12,10,28,.88);border:1px solid rgba(245,177,61,.55);color:#fef3c7}
+@media(max-width:1100px){.roll-panel,.brake-panel{display:none!important}.brake-meter{display:none!important}}
+/* ===== Menú por pinza: el efecto se elige y queda fijo ===== */
+.gesture-intro{pointer-events:auto}
+.gesture-cards>.g-card{flex:1;max-width:320px;display:flex;flex-direction:column;gap:6px;align-items:center;padding:22px 12px;border:2px solid #252d37;border-radius:14px;background:rgba(14,17,24,.7);color:#e8edf2;font-family:inherit;cursor:pointer;transition:border-color .12s,background .12s,transform .12s}
+.g-card:hover,.g-card.hover{transform:scale(1.04)}
+.g-card-fx:hover,.g-card-fx.hover{border-color:var(--fxviolet);background:rgba(157,140,255,.14);box-shadow:0 0 20px rgba(157,140,255,.35)}
+.g-card-eco:hover,.g-card-eco.hover{border-color:var(--a);background:rgba(34,211,238,.12);box-shadow:0 0 20px rgba(34,211,238,.35)}
+.g-card-roll:hover,.g-card-roll.hover{border-color:var(--roll);background:rgba(74,222,128,.12);box-shadow:0 0 20px rgba(74,222,128,.35)}
+.g-card-brake:hover,.g-card-brake.hover{border-color:var(--brake);background:rgba(245,177,61,.12);box-shadow:0 0 20px rgba(245,177,61,.35)}
+.hm-change{height:32px;padding:0 12px;border-radius:16px;border:1px solid #5b5690;background:#1a1736;color:#e4defc;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+.hm-change[hidden]{display:none!important}
+.hm-change:disabled{opacity:.4;cursor:default}
+.roll-hint{left:50%;top:118px;transform:translateX(-50%);background:rgba(8,20,12,.88);border:1px solid rgba(74,222,128,.6);color:#dcfce7;font-size:15px}
+body.handmode .nocam{display:none}
+/* Cursor de pinza: aro blanco = donde cae la pinza; puntos = indice (amarillo) y pulgar */
+.cursor{border-color:#fff;box-shadow:0 0 0 2px rgba(0,0,0,.45),0 0 10px rgba(255,255,255,.35)}
+.cursor .fd-i,.cursor .fd-t{position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;background:#facc15;box-shadow:0 0 0 2px rgba(0,0,0,.5);display:block}
+.cursor .fd-t{background:#fde68a;width:8px;height:8px;margin:-4px 0 0 -4px}
+.cursor .fd-l{position:absolute;left:50%;top:50%;height:2px;margin-top:-1px;background:rgba(250,204,21,.55);transform-origin:0 50%;display:block}
+.cursor.pinched .fd-i,.cursor.pinched .fd-t,.cursor.pinched .fd-l{opacity:0}
+body.handmode .cursor i{display:none}
+body.handmode.hm-picking .cursor i{display:block}
+/* Barra del Modo manos para la demo: una linea, mini-tarjetas de efecto, sin interruptores */
+.hm-toggles[hidden],.hm-slider[hidden],#hmLaunchBtn{display:none!important}
+.handmode-bar{padding:8px 12px;gap:14px}
+.hm-titlewrap{min-width:0!important;max-width:360px}
+.hm-help{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px}
+/* Indicador del efecto: pequeno, sin interaccion; solo el efecto en uso se enciende */
+.hm-selector{gap:4px;pointer-events:none}
+.hm-sel{height:24px;min-width:0;padding:0 8px;border-radius:8px;border:1px solid #2c3442;background:transparent;display:inline-flex;align-items:center;font:700 12px/1 "Barlow Condensed",sans-serif;letter-spacing:.08em;color:#5b6674;cursor:default;box-shadow:none}
+.hm-sel-fx.on{border-color:var(--fxviolet);color:var(--fxviolet);background:rgba(157,140,255,.14)}
+.hm-sel-eco.on{border-color:var(--a);color:var(--a);background:rgba(34,211,238,.12)}
+.hm-sel-roll.on{border-color:var(--roll);color:var(--roll);background:rgba(74,222,128,.12);box-shadow:none}
+.hm-sel-brake.on{border-color:var(--brake);color:var(--brake);background:rgba(245,177,61,.12);box-shadow:none}
+/* Perillas del FILTRO: mismo estilo de tarjeta, color violeta del efecto, solo palabras */
+.hm-knobs{display:flex;gap:8px;flex:none}
+.hm-knobs[hidden]{display:none!important}
+.hm-knob{height:42px;min-width:84px;padding:0 12px;border-radius:12px;border:2px solid #2c3442;background:rgba(14,17,24,.75);color:#b9b3e6;font:700 16px/1 "Barlow Condensed",sans-serif;letter-spacing:.08em;cursor:pointer;transition:transform .12s,border-color .12s,background .12s}
+.hm-knob.on{background:var(--fxviolet)!important;border-color:var(--fxviolet)!important;color:#140f2e!important}
+.hm-knob.hover{transform:scale(1.18) translateY(4px)!important;border-color:#fff!important;background:#fff!important;color:#2a1f6b!important;box-shadow:0 0 0 4px rgba(157,140,255,.7),0 0 26px rgba(255,255,255,.8)!important;z-index:1;position:relative}
+.g-card.hover{transform:scale(1.08);border-width:3px;filter:brightness(1.25)}
+.hm-knob.on{border-color:var(--fxviolet);background:rgba(157,140,255,.2);color:#fff;box-shadow:0 0 12px rgba(157,140,255,.45)}
+.handmode-bar{max-width:min(97%,1560px)}
+@media(min-width:901px){.hm-titlewrap{min-width:330px}}
 /* ===== Bloque 6: sin desborde horizontal ===== */
 .layout,.col,.panel,.stage-wrap,.spectrum-wrap{min-width:0;max-width:100%}
 .layout>*{min-width:0}
@@ -311,3 +441,151 @@ canvas,video,svg{max-width:100%}
 .picker-back{min-width:150px;min-height:72px}
 #trackPicker .pickcard>span:nth-child(2){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .picker-pointing{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* ===== STEMS (Meta Demucs) ===== */
+:root{--stems:#FACC15}
+.gesture-cards .g-stems{color:var(--stems)}
+.g-card-stems:hover,.g-card-stems.hover{border-color:var(--stems);background:rgba(250,204,21,.12);box-shadow:0 0 20px rgba(250,204,21,.35)}
+.hm-sel-stems.on{border-color:var(--stems);color:var(--stems);background:rgba(250,204,21,.12)}
+.hm-stems{display:flex;gap:8px;flex:none}
+.hm-stems[hidden]{display:none!important}
+.hm-stem,.stem-pill{position:relative;height:42px;min-width:92px;padding:0 12px;border-radius:12px;border:2px solid var(--sc);background:color-mix(in srgb,var(--sc) 22%,transparent);color:var(--sc);font:700 16px/1 "Barlow Condensed",sans-serif;letter-spacing:.08em;cursor:pointer;transition:transform .12s,background .12s,opacity .12s}
+.hm-stem.on,.stem-pill.on{background:var(--sc);color:#0b0f14;box-shadow:0 0 14px color-mix(in srgb,var(--sc) 60%,transparent)}
+.hm-stem.muted,.stem-pill.muted{opacity:.45;background:transparent;color:#8f99a6;border-color:#3a434f}
+.hm-stem.muted::after,.stem-pill.muted::after{content:"";position:absolute;left:8px;right:8px;top:50%;height:2px;background:#8f99a6;transform:rotate(-14deg)}
+.hm-stem.sel,.stem-pill.sel{outline:3px solid #fff;outline-offset:2px}
+.hm-stem.hover,.stem-pill.hover{transform:scale(1.15) translateY(3px);box-shadow:0 0 0 4px rgba(255,255,255,.6),0 0 22px rgba(255,255,255,.7)}
+.hm-stem:disabled{opacity:.3;cursor:default}
+.stems-panel{position:absolute;left:50%;bottom:92px;transform:translateX(-50%);z-index:16;display:flex;gap:18px;align-items:stretch;width:min(96%,1500px);justify-content:center}
+.stems-panel[hidden]{display:none!important}
+.stems-deck{flex:1;max-width:660px;border-radius:16px;background:rgba(8,11,15,.86);border:2px solid var(--dc,#343a52);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.stems-deck:empty{display:none}
+.stems-deck h3{margin:0;display:flex;align-items:center;gap:10px;font:700 20px/1 "Barlow Condensed",sans-serif;letter-spacing:.06em;color:#e8edf2}
+.stems-deck h3 b{width:30px;height:30px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:var(--dc);color:#061218}
+.stems-deck h3 small{font:500 12px Inter,sans-serif;color:#9aa6b2;letter-spacing:0;margin-left:auto}
+.stem-row{display:flex;align-items:center;gap:10px}
+.stem-row .stem-pill{height:34px;min-width:96px;font-size:14px}
+.stem-row canvas{flex:1;height:34px;min-width:0;border-radius:6px;background:#0a0f14}
+.stems-mid{display:none;flex:0 0 220px;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center}
+.stems-panel.mashup .stems-mid{display:flex}
+.stems-mid strong{font:700 34px/1 "Barlow Condensed",sans-serif;letter-spacing:.06em;color:#fff;text-shadow:0 0 18px rgba(157,140,255,.8)}
+.stems-mid strong[hidden]{display:none}
+.stems-mid small{font-size:11px;color:#9aa6b2}
+.stems-x{position:relative;width:190px;height:10px;border-radius:5px;background:linear-gradient(90deg,var(--a),#2a323c 45%,#2a323c 55%,var(--b));display:block}
+.stems-x i{position:absolute;top:50%;left:50%;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;background:#1b2029;border:2px solid #fff;display:block}
+.stems-badge{margin-left:8px;font:700 11px/1 "Barlow Condensed",sans-serif;letter-spacing:.08em;padding:3px 6px;border-radius:6px;border:1px solid #3a434f;color:#9aa6b2;white-space:nowrap}
+.stems-badge.ready{border-color:var(--stems);color:var(--stems)}
+.hm-target{align-items:center}.hm-target small{font:700 11px/1 Inter,sans-serif;color:#9aa6b2;letter-spacing:.08em}.hm-target .hm-stem{min-width:70px;height:38px;font-size:14px;background:transparent}.hm-target .hm-stem.on{background:var(--sc);color:#0b0f14}
+/* ===== Consola de stems (mashup): más grande, controles tipo consola ===== */
+.stems-panel{bottom:84px;width:min(97%,1760px);gap:22px}
+.stems-deck{max-width:760px;padding:16px 18px;gap:10px}
+.stems-deck h3{font-size:24px}
+.stem-row{gap:12px}
+.stem-row .stem-pill{height:46px;min-width:120px;font-size:17px;flex:none}
+.stem-row canvas{height:46px}
+.stem-row .stem-fader{flex:0 0 120px;accent-color:var(--sc);height:46px}
+.stems-mid{flex:0 0 300px;gap:14px}
+.stems-mid strong{font-size:40px}
+.stems-xlabels{display:flex;align-items:center;justify-content:space-between;width:100%;font:600 13px Inter,sans-serif;color:#c9d3dc}
+.stems-xlabels b{width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font:700 16px "Barlow Condensed",sans-serif;color:#061218}
+.stems-xlabels b:first-child{background:var(--a)}.stems-xlabels b:last-child{background:var(--b)}
+.stems-cross{width:100%;height:46px;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer}
+.stems-cross::-webkit-slider-runnable-track{height:14px;border-radius:7px;background:linear-gradient(90deg,var(--a),#2a323c 45%,#2a323c 55%,var(--b))}
+.stems-cross::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:44px;margin-top:-15px;border-radius:8px;background:linear-gradient(90deg,#4b5563,#2a313b);border:2px solid #fff;box-shadow:0 0 12px rgba(255,255,255,.5)}
+.stems-cross[data-focus],.stem-fader[data-focus]{outline:3px solid #fff;outline-offset:4px;border-radius:10px}
+.stems-xfer{display:flex;gap:10px;width:100%}
+.stems-xbtn{flex:1;height:46px;border-radius:12px;border:2px solid #5b5690;background:#1a1736;color:#fff;font:700 18px/1 "Barlow Condensed",sans-serif;letter-spacing:.08em;cursor:pointer}
+.stems-xbtn[data-xfer="0"]{border-color:var(--a)}.stems-xbtn[data-xfer="1"]{border-color:var(--b)}
+.stems-xbtn:disabled{opacity:.3;cursor:default}
+.stems-xbtn.hover,.stems-xbtn[data-focus]{background:#fff;color:#1a1736;transform:scale(1.06)}
+.stems-xbtn.running{animation:xferPulse .5s infinite alternate}
+@keyframes xferPulse{to{box-shadow:0 0 18px #fff}}
+/* Entorno: luz de la habitación según el crossfader + pulso del bombo en los bordes */
+.room-tint{position:absolute;inset:0;z-index:2;pointer-events:none;mix-blend-mode:screen;transition:background .15s}
+.room-tint[hidden]{display:none!important}
+/* En el Modo manos el cursor de pinza va SIEMPRE por encima de barra, menú y paneles */
+body.handmode .cursor{z-index:40}
+/* Pantalla completa del escenario (solo cámara + capas) */
+#stage:fullscreen{width:100vw;height:100vh;max-width:none;max-height:none;border-radius:0;border:0;background:#000}
+
+/* Botones del deck legibles en video y fáciles de tomar con la mano */
+.deck .pad{height:44px;font-size:13px;font-weight:700;letter-spacing:.05em}
+.deck .pad.fn-cue{color:#FFD27A}.deck .pad.fn-salto{color:#F1F6FA}.deck .pad.fn-sonido{color:#A6F0C2}
+.deck .row .loopbtn,.deck .row .ecohold{min-height:40px;font-size:13px;font-weight:700}
+/* FX FILTRO / FX ECO ocultos: repetían las perillas del mezclador y el Modo manos */
+.deck .pad.fn-fx{display:none}
+@media(min-width:641px){.deck .pads{grid-template-columns:repeat(6,minmax(0,1fr))}}
+/* SYNC al tamaño de CUE; se enciende cuando el deck queda sincronizado */
+.btn.syncbtn{width:68px;height:44px;padding:0;font-size:16px;border-width:2px;border-radius:12px}
+.deck-a .btn.syncbtn{border-color:rgba(34,211,238,.55)}.deck-b .btn.syncbtn{border-color:rgba(255,79,163,.55)}
+.deck-a .btn.syncbtn.sync-on{background:var(--a);color:#05131A;border-color:var(--a);box-shadow:0 0 18px var(--a)}
+.deck-b .btn.syncbtn.sync-on{background:var(--b);color:#1A0510;border-color:var(--b);box-shadow:0 0 18px var(--b)}
+/* Barra del Modo manos algo mas abajo (8 %): elegir parte o efecto con pinza sin
+   subir la mano al borde de la camara. Los avisos centrales bajan con ella. */
+.handmode-bar{top:8vh}
+.hm-handmsg,.eco-notice,.brake-hint,.roll-hint{top:calc(8vh + 84px)}
+/* SUBIDA y DROP */
+.gesture-cards .g-build{color:#FF5A5F}
+.g-card-build:hover,.g-card-build.hover{border-color:#FF5A5F;background:rgba(255,90,95,.12);box-shadow:0 0 20px rgba(255,90,95,.35)}
+.hm-sel-build.on{border-color:#FF5A5F;color:#FF5A5F;background:rgba(255,90,95,.12)}
+.build-hint{left:50%;top:calc(8vh + 84px);transform:translateX(-50%);background:rgba(28,8,10,.88);border:1px solid rgba(255,90,95,.6);color:#ffe4e4;font-size:15px}
+/* Menu de efectos: 6 tarjetas en 2 filas de 3, mismo tamano de tarjeta */
+.gesture-cards{display:grid;grid-template-columns:repeat(3,172px);grid-auto-rows:1fr;justify-content:center;gap:18px}
+.gesture-cards>.g-card{max-width:none}
+/* ===== Reorganizacion (estilo Serato/rekordbox): barra fina, Ajustes aparte ===== */
+.topbar,.top-actions{overflow:visible}
+.top-actions{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}
+.top-actions .grow{flex:1 1 auto}
+.seg{display:inline-flex;flex:none}.seg .btn{border-radius:0;font-weight:700;letter-spacing:.06em}.seg .btn:first-child{border-radius:6px 0 0 6px}.seg .btn:last-child{border-radius:0 6px 6px 0;margin-left:-1px}
+.btn.rec{font-weight:700}
+.menu{position:relative;flex:none}.menu>summary{list-style:none;display:inline-block}.menu>summary::-webkit-details-marker{display:none}
+.menu-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:40;display:flex;flex-direction:column;gap:6px;min-width:230px;padding:10px;background:#0C1015;border:1px solid #2A323D;border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.6)}
+.menu-pop .btn{text-align:left}.menu-pop select[hidden]{display:none}.menu-pop .msg{font-size:12px;line-height:1.6}
+.msgbar{margin:6px 10px 0;padding:6px 12px;border:1px solid #1D242D;border-radius:8px;background:#0C1015;min-height:20px}.msgbar .msg{margin:0;font-size:13px}
+.layout{grid-template-columns:1fr}
+.autodj-row{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:6px 0 2px}
+.autodj-toggle{display:inline-flex;align-items:center;gap:6px;font-weight:700;letter-spacing:.06em;cursor:pointer}
+.autodj-toggle input{accent-color:#4ade80}
+.autodj-toggle.on{border-color:#4ade80;color:#4ade80;background:rgba(74,222,128,.12)}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(400px,92vw);z-index:80;overflow:auto;padding:14px;background:#0A0E13;border-left:1px solid #2A323D;box-shadow:-16px 0 40px rgba(0,0,0,.6)}
+.drawer[hidden]{display:none}
+.drawer-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}.drawer-head h2{margin:0;font-size:18px}
+.drawer-group{border:1px solid #1D242D;border-radius:10px;padding:8px 12px;margin-bottom:10px;background:#0C1015}
+.drawer-group>summary{cursor:pointer;font-weight:700;letter-spacing:.04em;padding:4px 0}
+.drawer-group label{display:block;margin:8px 0;font-size:13px}.drawer-group input[type=range]{width:100%}
+.menu-pop #btnMirror,.menu-pop #btnFrame{width:100%;flex:none}
+/* ===== Biblioteca: tabla compacta + colas por deck (lineup) ===== */
+.lib-head{display:flex;align-items:center;gap:8px}.lib-head h2{margin:0}
+.lib-body{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px;margin-top:8px}
+.lib-row{display:grid;grid-template-columns:44px minmax(0,1fr) 56px 76px 52px 70px 132px;align-items:center;gap:8px}
+.lib-th{padding:4px 10px;font:700 11px Inter,sans-serif;letter-spacing:.06em;color:#7d8794;border-bottom:1px solid #1D242D}
+.lib-th button{background:none;border:0;color:inherit;font:inherit;letter-spacing:inherit;text-align:left;padding:0;cursor:pointer}
+.lib-th button.on{color:var(--ink)}.lib-th button.on::after{content:' ' attr(data-dir)}
+.track-list{max-height:480px}
+body.lib-expanded .track-list{max-height:72vh}body.lib-expanded .lib-queues ol{max-height:60vh}
+.track-list li.lib-row{display:grid;padding:4px 10px;min-height:30px;margin-bottom:2px;border-radius:5px;font-size:13px}
+.track-list li.lib-row:hover{background:#0f1c26}
+.track-list li.lib-row .tt{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.track-list li.lib-row .num{color:#7d8794;font-size:12px}
+.track-list li.lib-row.played .tt{color:#6b7684}
+.track-list li.lib-row .acts{display:flex;gap:4px;justify-content:flex-end}
+.track-list li.lib-row .btn.small{padding:3px 8px}
+.btn.qa{color:var(--a);border-color:rgba(34,211,238,.5)}.btn.qb{color:var(--b);border-color:rgba(255,79,163,.5)}
+.tagdeck.tag-a{background:rgba(34,211,238,.18);color:var(--a)}.tagdeck.tag-b{background:rgba(255,79,163,.18);color:var(--b)}
+.tagq{font-size:11px;font-weight:700;padding:2px 6px;border-radius:8px;border:1px solid currentColor}.tagq.tag-a{color:var(--a)}.tagq.tag-b{color:var(--b)}
+.tagplayed{font-size:11px;color:#6b7684}.tagstems{color:var(--stems);font-weight:700}
+.lib-queues{display:flex;flex-direction:column;gap:8px}
+.dq{border:1px solid #1D242D;border-radius:8px;padding:6px 8px;background:#0C1015}
+.dq h3{margin:0 0 4px;font:700 13px "Barlow Condensed",sans-serif;letter-spacing:.1em}.dq-a h3{color:var(--a)}.dq-b h3{color:var(--b)}
+.dq-a{border-left:3px solid var(--a)}.dq-b{border-left:3px solid var(--b)}
+.dq ol{list-style:none;margin:0;padding:0;max-height:180px;overflow:auto}
+.dq li{display:grid;grid-template-columns:22px minmax(0,1fr) auto auto auto;gap:4px;align-items:center;font-size:12px;padding:2px 0}
+.dq li .qn{color:#7d8794;font-weight:700}.dq li .tt{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.dq li .btn.small{padding:1px 6px;font-size:11px}.dq li.empty{display:block;color:#6b7684;font-style:italic}
+.nextup{margin:2px 0 4px;font:700 11px Inter,sans-serif;letter-spacing:.04em;color:#9aa6b2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.deck-a .nextup{color:#7fdcec}.deck-b .nextup{color:#ff9fcb}
+@media(max-width:1100px){.lib-body{grid-template-columns:1fr}.lib-row{grid-template-columns:32px minmax(0,1fr) 44px 60px 0 64px 120px}}
+.btn.nextup{display:block;width:100%;text-align:left;margin:2px 0 4px;padding:4px 8px;background:#0C1015}.btn.nextup[hidden]{display:none}
+/* Opacidad de la mesa (Ajustes › Consola): el degradado del tema tapaba --alpha */
+.deck,.mixer{background:linear-gradient(180deg,rgba(24,29,37,var(--alpha,.86)),rgba(17,21,27,var(--alpha,.86)))}
+/* Caja de STEMS una fila (~54 px) mas arriba: RESTO queda donde estaba BAJO */
+.stems-panel{bottom:138px}

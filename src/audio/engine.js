@@ -1,5 +1,7 @@
 import { crossfaderGains } from '../gestures/logic.js';
 import { scrubPosition } from './scrub.js';
+// Orden de los stems de Meta Demucs en el buffer de 8 canales (pares L/R).
+export const STEM_NAMES = ['vocals', 'drums', 'bass', 'other'];
 // Motor Web Audio: 2 canales -> trim -> EQ3 -> filtro -> fader -> crossfader
 // -> master -> analyser -> destino. Efectos: delay y reverb (convolver generado).
 export class Channel {
@@ -13,7 +15,10 @@ export class Channel {
     this._rFrom = 1; this._rTo = 1;
     this.scrubNode = null; this.scrubbing = false; this.scrubPos = 0; this.scrubSpeed = 0; this._scrubAt = 0; this._scrubWasPlaying = false;
     this.cueSend = ctx.createGain(); this.cueSend.gain.value = 0; // preescucha (P3.c)
-    this.trim = ctx.createGain(); this.low = ctx.createBiquadFilter();
+    this.trim = ctx.createGain();
+    this.srcGain = ctx.createGain(); this.srcGain.connect(this.trim); // mudo del slip (ROLL)
+    this.rollGain = ctx.createGain(); this.rollGain.connect(this.trim); this.roll = null; this._rollTimer = null;
+    this.low = ctx.createBiquadFilter();
     this.mid = ctx.createBiquadFilter(); this.high = ctx.createBiquadFilter();
     this.filter = ctx.createBiquadFilter(); this.fader = ctx.createGain();
     this.xGain = ctx.createGain(); this.analyser = ctx.createAnalyser();
@@ -28,11 +33,193 @@ export class Channel {
     this.trim.connect(this.low); this.low.connect(this.mid); this.mid.connect(this.high);
     this.high.connect(this.filter); this.filter.connect(this.filterHp); this.filterHp.connect(this.fader);
     this.fader.connect(this.xGain); this.xGain.connect(this.analyser); this.analyser.connect(masterIn);
-    this.fader.connect(this.delaySend); this.fader.connect(this.verbSend);
+    // Envios post-crossfader: un deck cerrado en el crossfader no se cuela por el eco.
+    this.xGain.connect(this.delaySend); this.xGain.connect(this.verbSend);
     this.filter.connect(this.cueSend); // pre-fader: se oye aunque el canal este cerrado
     this.delaySend.gain.value = 0; this.verbSend.gain.value = 0;
+    // --- STEMS (Meta Demucs): un buffer de 8 canales = VOZ, BATERIA, BAJO y
+    // RESTO en estereo. Sigue habiendo UNA fuente (rate, seek, LOOP, FRENO y
+    // ROLL no cambian); los stems se separan a la salida. Sin stems, srcGain
+    // y rollGain van directos a trim como siempre.
+    this.stemBuffer = null; this.stemsOn = false; this.rollTargets = null;
+    this.stemLevel = STEM_NAMES.map(() => { const g = ctx.createGain(); g.connect(this.trim); return g; });
+    this.stemAnalyser = this.stemLevel.map(lv => { const a = ctx.createAnalyser(); a.fftSize = 256; lv.connect(a); return a; }); // energia por stem (visual)
+    // Envio de eco por stem (lo conecta el motor al delay). Sale antes del
+    // fader, asi que lleva su propio fader y crossfader espejo (ecoFader, ecoX).
+    this.stemEcoMix = ctx.createGain(); this.ecoFader = ctx.createGain(); this.stemEcoOut = ctx.createGain();
+    this.stemEcoMix.connect(this.ecoFader); this.ecoFader.connect(this.stemEcoOut);
+    this.stemEco = this.stemLevel.map(lv => { const g = ctx.createGain(); g.gain.value = 0; lv.connect(g); g.connect(this.stemEcoMix); return g; });
+    const bus = () => {
+      const sp = ctx.createChannelSplitter(8);
+      return { sp, gates: STEM_NAMES.map((_, k) => { const m = ctx.createChannelMerger(2); sp.connect(m, 2 * k, 0); sp.connect(m, 2 * k + 1, 1); const g = ctx.createGain(); m.connect(g); g.connect(this.stemLevel[k]); return g; }) };
+    };
+    this.stemMain = bus(); this.stemRoll = bus(); // puertas por stem de la fuente principal y del ROLL
   }
-  load(buffer) { this.stop(); this.buffer = buffer; this.offset = 0; this.cue = 0; this.loopRange = null; if (this.scrubNode && buffer) this._sendBuffer(); }
+  load(buffer) { this.stop(); this.clearStems(); this.buffer = buffer; this.offset = 0; this.cue = 0; this.loopRange = null; if (this.scrubNode && buffer) this._sendBuffer(); }
+  // Buffer que suenan las fuentes: el de stems si estan activos.
+  _buf() { return this.stemsOn && this.stemBuffer ? this.stemBuffer : this.buffer; }
+  _route(on) {
+    for (const [src, b] of [[this.srcGain, this.stemMain], [this.rollGain, this.stemRoll]]) { try { src.disconnect(); } catch {} src.connect(on ? b.sp : this.trim); }
+  }
+  // Activa los stems (buffer de 8 canales con la misma duracion). Si el deck
+  // suena, cambia de fuente en el mismo punto con un ataque corto.
+  setStems(buf8) {
+    if (!this.buffer || !buf8 || buf8.numberOfChannels !== 8 || Math.abs(buf8.duration - this.buffer.duration) > 0.25) return false;
+    const was = this.playing, pos = this.position();
+    if (was) { this.cancelRoll(); this._stopSource(); this.playing = false; }
+    this.stemBuffer = buf8; this.stemsOn = true; this._route(true);
+    if (was) this.playAt(pos, this.ctx.currentTime + 0.02); else this.offset = pos;
+    return true;
+  }
+  clearStems() {
+    if (!this.stemsOn && !this.stemBuffer) return;
+    const was = this.playing, pos = this.position();
+    if (was) { this.cancelRoll(); this._stopSource(); this.playing = false; }
+    this.stemBuffer = null; this.stemsOn = false; this.rollTargets = null; this._route(false);
+    const t = this.ctx.currentTime;
+    this.stemLevel.forEach(g => g.gain.setTargetAtTime(1, t, 0.01)); this.stemEco.forEach(g => g.gain.setTargetAtTime(0, t, 0.01));
+    if (was && this.buffer) this.playAt(pos, t + 0.02);
+  }
+  // Volumen de un stem (0..1) desde un instante (cambios en el golpe), con
+  // fundido corto para que no haga clic.
+  setStemLevel(k, v, atCtx = null) {
+    const g = this.stemLevel[k]; if (!g) return;
+    const t = Math.max(this.ctx.currentTime, atCtx ?? this.ctx.currentTime);
+    g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(Math.max(0, Math.min(1.5, v)), t, 0.008);
+  }
+  stemLevelNow(k) { return this.stemLevel[k]?.gain.value ?? 1; }
+  // Pico 0..1 de un stem tras su volumen (para luces y pulso del bombo).
+  stemEnergy(k) {
+    const a = this.stemAnalyser[k]; if (!a?.getByteTimeDomainData || !this.stemsOn) return 0;
+    const d = this._stemBuf || (this._stemBuf = new Uint8Array(a.frequencyBinCount)); a.getByteTimeDomainData(d);
+    let p = 0; for (const v of d) p = Math.max(p, Math.abs(v - 128) / 128); return p;
+  }
+  setStemEco(k, v) { const g = this.stemEco[k]; if (g) g.gain.setTargetAtTime(Math.max(0, Math.min(1, v)), this.ctx.currentTime, 0.05); }
+  // Puerta de la fuente principal durante el ROLL: entera (srcGain) o solo
+  // los stems elegidos (el resto sigue sonando normal).
+  _mainGate(value, atCtx, rampTo = null, rampEnd = null) {
+    const targeted = this.stemsOn && this.rollTargets?.length;
+    const params = targeted ? this.rollTargets.map(k => this.stemMain.gates[k].gain) : [this.srcGain.gain];
+    for (const p of params) {
+      p.cancelScheduledValues(this.ctx.currentTime);
+      p.setValueAtTime(value, atCtx);
+      if (rampTo !== null) p.linearRampToValueAtTime(rampTo, rampEnd);
+    }
+  }
+  // --- LOOP ROLL slip (4C): la fuente principal sigue sonando en silencio
+  // (esa es la posicion slip); unas voces repiten el trozo con fundidos de
+  // 4 ms en cada junta. Al salir se desmudece la principal en el golpe.
+  cancelRoll() {
+    if (this.stemBrake) this.endStemBrake();
+    if (this._rollTimer) { clearInterval(this._rollTimer); this._rollTimer = null; }
+    if (this.roll) for (const v of this.roll.voices) { try { v.src.stop(); } catch {} try { v.gain.disconnect(); } catch {} }
+    this.roll = null;
+    const t = this.ctx.currentTime;
+    for (const p of [this.srcGain.gain, ...this.stemMain.gates.map(g => g.gain)]) { p.cancelScheduledValues(t); p.setTargetAtTime(1, t, 0.005); }
+  }
+  _rollSchedule() {
+    const R = this.roll; if (!R) return;
+    const horizon = this.ctx.currentTime + 0.14, fade = 0.004;
+    while (R.nextTime < horizon && (!R.exitAt || R.nextTime < R.exitAt - 0.001)) {
+      const start = R.nextTime, durPos = R.sizeSec, durReal = durPos / Math.max(0.05, this.rate);
+      const src = this.ctx.createBufferSource(); src.buffer = this._buf(); src.playbackRate.value = this.rate;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0, start); g.gain.linearRampToValueAtTime(1, start + fade);
+      g.gain.setValueAtTime(1, start + Math.max(fade, durReal)); g.gain.linearRampToValueAtTime(0, start + durReal + fade);
+      src.connect(g); g.connect(this.rollGain);
+      const v = { src, gain: g, start, end: start + durReal };
+      R.voices.add(v);
+      src.onended = () => { R.voices.delete(v); try { g.disconnect(); } catch {} };
+      try { src.start(start, R.segmentStart % this.buffer.duration, durPos + fade * this.rate + 0.03); } catch { R.voices.delete(v); break; }
+      R.nextTime = start + durReal; R.repetitions++;
+    }
+  }
+  _rollTruncate(atCtx) {
+    const R = this.roll; if (!R) return;
+    const fade = 0.004;
+    for (const v of [...R.voices]) {
+      if (v.start >= atCtx - 0.001) { try { v.src.stop(); } catch {} R.voices.delete(v); }
+      else if (v.end > atCtx) {
+        v.gain.gain.cancelScheduledValues(atCtx); v.gain.gain.setValueAtTime(1, atCtx); v.gain.gain.linearRampToValueAtTime(0, atCtx + fade);
+        try { v.src.stop(atCtx + fade + 0.03); } catch {}
+        v.end = atCtx;
+      }
+    }
+    R.nextTime = atCtx;
+  }
+  startSlipRoll({ segmentStart = 0, sizeSec = 0.375, whenCtx = null } = {}) {
+    if (!this.buffer || !this.playing || this.scrubbing || !(sizeSec > 0.02)) return false;
+    this.cancelRoll();
+    const when = Math.max(this.ctx.currentTime + 0.005, whenCtx ?? this.ctx.currentTime + 0.01);
+    const fade = 0.004, t = this.ctx.currentTime;
+    // Con stems y objetivo (p. ej. solo BATERIA), el roll solo suena en esos
+    // stems y los demas siguen con la pista normal.
+    const targets = this.stemsOn && this.rollTargets?.length ? this.rollTargets : null;
+    this.stemRoll.gates.forEach((g, k) => g.gain.setValueAtTime(!targets || targets.includes(k) ? 1 : 0, t));
+    this._mainGate(1, Math.max(t, when - fade), 0, when);
+    this.roll = { segmentStart: Math.max(0, segmentStart), sizeSec, nextTime: when, voices: new Set(), exitAt: null, repetitions: 0, startedCtx: when };
+    this._rollSchedule();
+    this._rollTimer = setInterval(() => this._rollSchedule(), 25);
+    return true;
+  }
+  changeRollSize(sizeSec, atCtx) {
+    if (!this.roll || !(sizeSec > 0.02)) return false;
+    const at = Math.max(this.ctx.currentTime + 0.005, atCtx);
+    this._rollTruncate(at); this.roll.sizeSec = sizeSec; this.roll.exitAt = null; this._rollSchedule();
+    return true;
+  }
+  exitSlipRollAt(atCtx) {
+    if (!this.roll) return false;
+    const at = Math.max(this.ctx.currentTime + 0.005, atCtx), fade = 0.004;
+    this.roll.exitAt = at; this._rollTruncate(at);
+    this._mainGate(0, Math.max(this.ctx.currentTime, at - fade), 1, at + fade);
+    const ms = Math.max(30, (at - this.ctx.currentTime) * 1000 + 80);
+    setTimeout(() => { if (this.roll && this.roll.exitAt === at) this.cancelRoll(); }, ms);
+    return true;
+  }
+  // --- FRENO por stems: una voz aparte frena solo esos stems (p. ej. la
+  // MUSICA mientras la VOZ sigue). La fuente principal no cambia de
+  // velocidad y sigue sonando en silencio en esos stems: es la posicion slip.
+  startStemBrake({ targets = [], durationSec = 1, curve = null } = {}) {
+    if (!this.buffer || !this.playing || !this.stemsOn || !targets.length) return false;
+    this.cancelRoll(); this.endStemBrake();
+    const t = this.ctx.currentTime + 0.01, fade = 0.004, pos = this.position();
+    const src = this.ctx.createBufferSource(); src.buffer = this._buf(); src.playbackRate.value = this.rate;
+    const g = this.ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(1, t + fade);
+    src.connect(g); g.connect(this.rollGain);
+    this.stemRoll.gates.forEach((sg, k) => sg.gain.setValueAtTime(targets.includes(k) ? 1 : 0, t));
+    for (const k of targets) { const p = this.stemMain.gates[k].gain; p.cancelScheduledValues(t); p.setValueAtTime(1, t - fade); p.linearRampToValueAtTime(0, t); }
+    if (curve?.length > 1) src.playbackRate.setValueCurveAtTime(Float32Array.from(curve, v => Math.max(0.001, v * this.rate)), t, Math.max(0.05, durationSec));
+    src.start(t, pos % this.buffer.duration);
+    this.stemBrake = { src, gain: g, targets, endsAt: t + durationSec };
+    return true;
+  }
+  // Vuelta en un instante del reloj (el golpe): fuera la voz frenada y los
+  // stems vuelven desde la fuente principal, que nunca se paro.
+  endStemBrake(atCtx = null) {
+    const B = this.stemBrake; if (!B) return false;
+    const at = Math.max(this.ctx.currentTime + 0.005, atCtx ?? this.ctx.currentTime), fade = 0.006;
+    B.gain.gain.cancelScheduledValues(at); B.gain.gain.setValueAtTime(B.gain.gain.value, at); B.gain.gain.linearRampToValueAtTime(0, at + fade);
+    try { B.src.stop(at + fade + 0.02); } catch {}
+    for (const k of B.targets) { const p = this.stemMain.gates[k].gain; p.cancelScheduledValues(at); p.setValueAtTime(0, at); p.linearRampToValueAtTime(1, at + fade); }
+    B.src.onended = () => { try { B.gain.disconnect(); } catch {} };
+    this.stemBrake = null;
+    return true;
+  }
+  // Arranque en un instante del reloj de audio (vuelta del FRENO en el golpe).
+  playAt(pos, whenCtx) {
+    if (!this.buffer) return false;
+    this._stopSource();
+    const when = Math.max(this.ctx.currentTime + 0.005, whenCtx);
+    this.offset = Math.max(0, Math.min(pos, this.buffer.duration));
+    this.source = this._makeSource();
+    this.source.onended = () => { if (this.source && !this._looping) { this.playing = false; this.offset = 0; this.onEnded?.(); } };
+    this.srcGain.gain.cancelScheduledValues(this.ctx.currentTime);
+    this.srcGain.gain.setValueAtTime(0, when); this.srcGain.gain.linearRampToValueAtTime(1, when + 0.006); // ataque corto sin clic
+    this.source.start(when, this.offset % this.buffer.duration);
+    this.startedAt = when; this.playing = true; this._rFrom = this._rTo = this.rate;
+    return true;
+  }
   // --- Scrub con worklet (P3.a): posicion/velocidad con signo ---
   attachScrub(node) {
     this.scrubNode = node;
@@ -79,8 +266,8 @@ export class Channel {
   }
   clearLoop() { this.loopRange = null; if (this.source) this.source.loop = false; }
   _makeSource() {
-    const s = this.ctx.createBufferSource(); s.buffer = this.buffer;
-    s.playbackRate.value = this.rate; s.connect(this.trim);
+    const s = this.ctx.createBufferSource(); s.buffer = this._buf();
+    s.playbackRate.value = this.rate; s.connect(this.srcGain);
     if (this.loopRange) { s.loop = true; s.loopStart = this.loopRange.start; s.loopEnd = this.loopRange.end; }
     return s;
   }
@@ -100,11 +287,11 @@ export class Channel {
   }
   pause() {
     if (!this.playing) return;
-    this.offset = this.position(); this._stopSource(); this.playing = false;
+    this.offset = this.position(); this.cancelRoll(); this._stopSource(); this.playing = false;
   }
-  stop() { this._stopSource(); this.playing = false; this.offset = 0; }
+  stop() { this.cancelRoll(); this._stopSource(); this.playing = false; this.offset = 0; }
   _stopSource() { if (this.source) { try { this.source.onended = null; this.source.stop(); } catch {} this.source = null; } }
-  seek(t) { const was = this.playing; this._stopSource(); this.playing = false; this.offset = Math.max(0, Math.min(t, this.buffer ? this.buffer.duration : 0)); if (was) this.play(); }
+  seek(t) { const was = this.playing; this.cancelRoll(); this._stopSource(); this.playing = false; this.offset = Math.max(0, Math.min(t, this.buffer ? this.buffer.duration : 0)); if (was) this.play(); }
   position() {
     if (!this.buffer) return 0;
     if (this.scrubbing) return this.scrubNow();
@@ -188,7 +375,7 @@ export class AudioEngine {
     this.delayHp.connect(this.delayOut); this.delayOut.connect(this.master);
     this.verb = this.ctx.createConvolver(); this.verb.buffer = this._impulse(1.6, 2.2);
     this.verbOut = this.ctx.createGain(); this.verb.connect(this.verbOut); this.verbOut.connect(this.master);
-    for (const d of this.decks) { d.delaySend.connect(this.delay); d.verbSend.connect(this.verb); }
+    for (const d of this.decks) { d.delaySend.connect(this.delay); d.verbSend.connect(this.verb); d.stemEcoOut.connect(this.delay); }
     this.cross = 0; this.applyCrossfader();
     // Bus de preescucha (P3.c): destino de stream independiente del master.
     // Un <audio> con setSinkId lo manda a los auriculares; la grabacion
@@ -214,7 +401,7 @@ export class AudioEngine {
     return buf;
   }
   async decode(file) { const ab = await file.arrayBuffer(); return this.ctx.decodeAudioData(ab); }
-  applyCrossfader() { const { a, b } = crossfaderGains(this.cross); const t = this.ctx.currentTime; this.decks[0].xGain.gain.setTargetAtTime(a, t, 0.02); this.decks[1].xGain.gain.setTargetAtTime(b, t, 0.02); }
+  applyCrossfader() { const { a, b } = crossfaderGains(this.cross); const t = this.ctx.currentTime; [a, b].forEach((g, i) => { this.decks[i].xGain.gain.setTargetAtTime(g, t, 0.02); this.decks[i].stemEcoOut.gain.setTargetAtTime(g, t, 0.02); }); }
   setCross(v) { this.cross = v; this.applyCrossfader(); }
   // Tiempo de eco en segundos; la realimentacion nunca pasa de 0,5.
   setDelayTime(sec) {

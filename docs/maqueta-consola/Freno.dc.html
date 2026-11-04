@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MotionDJ · FRENO</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#07090c}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 810px; overflow: hidden; background: radial-gradient(ellipse 60% 70% at 50% 45%, #2a2f38 0%, #171b22 45%, #090b0f 100%); color: #e8edf2; font-family: Inter, system-ui, sans-serif;">
+
+  <div style="position: absolute; left: 50%; top: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 12px 14px 12px 20px; border-radius: 14px; background: rgba(12,10,28,.9); border: 2px solid {{accentFx}}; box-shadow: 0 0 24px {{accentFx}}44; white-space: nowrap;">
+    <div style="display: flex; flex-direction: column; gap: 3px;">
+      <span style="font: 700 18px/1 'Barlow Condensed', sans-serif; letter-spacing: .12em;">MODO MANOS · FRENO A</span>
+      <span style="font-size: 12px; color: #b9b3e6;">Palma de «alto» = la canción frena · quítala = vuelve en el golpe</span>
+    </div>
+    <div style="display: flex; gap: 6px; padding-left: 12px; border-left: 1px solid #3b3760;">
+      <span style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid #3b3760; color: #8f89b8; font-size: 12px; font-weight: 600; display: flex; align-items: center;">FILTRO · pinza</span>
+      <span style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid #3b3760; color: #8f89b8; font-size: 12px; font-weight: 600; display: flex; align-items: center;">ECO · puño</span>
+      <span style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid #3b3760; color: #8f89b8; font-size: 12px; font-weight: 600; display: flex; align-items: center;">ROLL · dedos</span>
+      <span style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid {{accentBrake}}; background: {{accentBrake}}22; color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; box-shadow: 0 0 12px {{accentBrake}}55;">FRENO · palma</span>
+    </div>
+    <button type="button" aria-pressed="true" style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid {{accentFx}}; background: #221d44; color: #e4defc; font-size: 12px; font-weight: 600;">● Latido</button>
+    <button type="button" style="height: 44px; padding: 0 20px; border-radius: 10px; border: 1px solid #5b5690; background: linear-gradient(180deg, #2b2752, #1a1736); color: #ffffff; font: 700 15px/1 'Barlow Condensed', sans-serif; letter-spacing: .14em;">SALIR (Esc)</button>
+  </div>
+
+  <div style="position: absolute; left: 60px; top: 190px; width: 46px; height: 430px; display: flex; flex-direction: column; align-items: center; gap: 8px;">
+    <span style="font-size: 11px; font-weight: 700; color: #cfc8ff; letter-spacing: .08em;">SECO</span>
+    <span style="position: relative; flex: 1 1 auto; width: 10px; border-radius: 5px; background: #1b2029; display: block;">
+      <span style="position: absolute; left: 0; right: 0; bottom: 0; height: 70%; border-radius: 5px; background: linear-gradient(0deg, {{accentA}}55, {{accentA}}); display: block;"></span>
+      <span style="position: absolute; left: -9px; bottom: 70%; width: 28px; height: 4px; margin-bottom: -2px; border-radius: 2px; background: #ffffff; box-shadow: 0 0 8px #ffffff; display: block;"></span>
+    </span>
+    <span style="font-size: 11px; font-weight: 700; color: #7d8794; letter-spacing: .08em;">LARGO</span>
+  </div>
+  <span style="position: absolute; left: 22px; top: 640px; width: 122px; text-align: center; font-size: 12px; line-height: 1.35; color: #9aa6b2;">altura de la palma = largo del freno</span>
+
+  <div style="position: absolute; left: 1090px; top: 230px; width: 320px; height: 250px; box-sizing: border-box; border-radius: 16px; background: rgba(8,11,15,.86); border: 1px solid #252d37;">
+    <span style="position: absolute; left: 18px; top: 16px; font-size: 11px; font-weight: 700; color: #9aa6b2; letter-spacing: .08em;">CURVA DEL FRENO</span>
+    <span style="position: absolute; left: 18px; top: 46px; font-size: 11px; color: #7d8794;">100 %</span>
+    <span style="position: absolute; left: 18px; top: 176px; font-size: 11px; color: #7d8794;">0</span>
+    <span style="position: absolute; left: 18px; bottom: 14px; right: 16px; font-size: 11px; line-height: 1.4; color: #9aa6b2;">palma arriba = 2 tiempos (seco) · abajo = 1 compás (largo)</span>
+  </div>
+
+  <div style="position: absolute; left: 730px; top: 572px; width: 300px; height: 70px; box-sizing: border-box; border-radius: 14px; background: rgba(8,11,15,.86); border: 1px solid #252d37;">
+    <span style="position: absolute; left: 16px; top: 12px; font-size: 11px; font-weight: 700; color: #9aa6b2; letter-spacing: .08em;">VELOCIDAD DEL DECK A</span>
+    <span style="position: absolute; right: 16px; top: 9px; font: 700 18px/1 'Barlow Condensed', sans-serif; color: {{accentA}};">35 %</span>
+    <span style="position: absolute; left: 16px; right: 16px; top: 42px; height: 10px; border-radius: 5px; background: #1b2029; display: block;">
+      <span style="position: absolute; left: 0; top: 0; bottom: 0; width: 35%; border-radius: 5px; background: {{accentA}}; display: block;"></span>
+    </span>
+  </div>
+
+  <svg width="1440" height="810" viewBox="0 0 1440 810" role="img" aria-label="Palma abierta de alto frente a un disco que gira cada vez más lento y la curva del freno" style="position: absolute; left: 0px; top: 0px; pointer-events: none;">
+    <defs>
+      <filter id="bblur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="8"></feGaussianBlur></filter>
+    </defs>
+    <circle cx="380" cy="440" r="200" fill="{{accentA}}" opacity="0.06"></circle>
+    <circle cx="380" cy="440" r="200" fill="none" stroke="{{accentA}}" stroke-width="12" opacity="0.18" filter="url(#bblur)"></circle>
+    <circle cx="380" cy="440" r="200" fill="none" stroke="{{accentA}}" stroke-width="3" stroke-dasharray="14 10" opacity="0.6"></circle>
+    <path d="{{palm.l}}" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.92"></path>
+    <path d="{{palm.d}}" fill="{{accentA}}"></path>
+    <path d="M 590 400 L 690 400" stroke="#e4defc" stroke-width="3" stroke-dasharray="8 8" opacity="0.6"></path>
+
+    <circle cx="880" cy="390" r="150" fill="#0c0f14" stroke="#2a313b" stroke-width="2"></circle>
+    <path d="{{grooves}}" fill="none" stroke="#1f2630" stroke-width="1.5"></path>
+    <path d="{{trail1}}" fill="none" stroke="{{accentA}}" stroke-width="5" stroke-linecap="round" opacity="0.85"></path>
+    <path d="{{trail2}}" fill="none" stroke="{{accentA}}" stroke-width="3" stroke-linecap="round" opacity="0.45"></path>
+    <circle cx="880" cy="390" r="46" fill="{{accentA}}"></circle>
+    <path d="{{mark}}" stroke="#061218" stroke-width="4" stroke-linecap="round"></path>
+    <circle cx="880" cy="390" r="6" fill="#061218"></circle>
+
+    <path d="M 1150 282 L 1150 412 L 1392 412" fill="none" stroke="#2a323c" stroke-width="1.5"></path>
+    <path d="M 1150 282 C 1230 286, 1310 360, 1388 410" fill="none" stroke="{{accentA}}" stroke-width="3"></path>
+    <circle cx="1268" cy="326" r="7" fill="#ffffff"></circle>
+  </svg>
+
+  <div style="position: absolute; left: 265px; top: 176px; width: 230px; display: flex; justify-content: center;">
+    <span style="padding: 6px 14px; border-radius: 14px; background: rgba(5,10,16,.85); border: 1px solid {{accentA}}88; font: 700 16px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; color: #e6faff; box-shadow: 0 0 14px {{accentA}}44; white-space: nowrap;">FRENO A · 35 %</span>
+  </div>
+  <span style="position: absolute; left: 230px; top: 664px; padding: 5px 12px; border-radius: 12px; background: rgba(5,10,16,.85); border: 1px solid #3a434f; font-size: 13px; font-weight: 600; white-space: nowrap;">✋ palma de «alto», quieta ~0,4 s = frenar</span>
+  <span style="position: absolute; left: 700px; top: 150px; padding: 6px 12px; border-radius: 12px; background: rgba(12,10,28,.88); border: 1px solid {{accentFx}}88; font-size: 13px; font-weight: 600; color: #e4defc; white-space: nowrap;">quita o cierra la mano = vuelve en el siguiente golpe, en su sitio</span>
+
+  <div style="position: absolute; left: 24px; bottom: 22px; display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 12px; background: rgba(8,11,15,.86); border: 1px solid {{accentA}}66;">
+    <span style="width: 26px; height: 26px; border-radius: 7px; background: {{accentA}}; color: #061218; display: flex; align-items: center; justify-content: center; font: 700 16px/1 'Barlow Condensed', sans-serif;">A</span>
+    <div style="display: flex; flex-direction: column; gap: 3px;">
+      <span style="font-size: 13px; font-weight: 600;">Luciid — Hellfire · FRENANDO</span>
+      <span style="font-size: 11px; color: #9aa6b2;">154,1 BPM · la pista sigue por debajo</span>
+    </div>
+  </div>
+  <div style="position: absolute; right: 24px; bottom: 22px; display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 12px; background: rgba(8,11,15,.86); border: 1px solid {{accentB}}66;">
+    <div style="display: flex; flex-direction: column; gap: 3px; align-items: flex-end;">
+      <span style="font-size: 13px; font-weight: 600;">Triptykh — Bass Keeps Going · en pausa en CUE</span>
+      <span style="font-size: 11px; color: #9aa6b2;">152,0 BPM · estimado</span>
+    </div>
+    <span style="width: 26px; height: 26px; border-radius: 7px; background: {{accentB}}; color: #1a0610; display: flex; align-items: center; justify-content: center; font: 700 16px/1 'Barlow Condensed', sans-serif;">B</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accentA":{"editor":"color","default":"#22d3ee","options":["#22d3ee","#38bdf8","#2dd4bf"]},"accentB":{"editor":"color","default":"#ff4fa3","options":["#ff4fa3","#f472b6","#fb7185"]},"accentFx":{"editor":"color","default":"#9d8cff","options":["#9d8cff","#c4b5fd","#e2e8f0"]},"accentBrake":{"editor":"color","default":"#f5b13d","options":["#f5b13d","#fb923c","#facc15"]},"$preview":{"width":1440,"height":810}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
+    const OPEN = [[0,110],[-38,85],[-62,55],[-78,28],[-92,4],[-30,20],[-36,-25],[-39,-55],[-42,-82],[-6,14],[-6,-36],[-6,-70],[-6,-100],[18,18],[22,-28],[24,-60],[26,-86],[38,30],[46,-4],[51,-28],[55,-50]];
+    const f = (v) => Number(v.toFixed(1));
+    const skel = (H, ox, oy, s) => {
+      const P = H.map((p) => [f(ox + p[0] * s), f(oy + p[1] * s)]);
+      const r = f(Math.max(2.5, 4 * s));
+      return { l: C.map((c) => 'M ' + P[c[0]][0] + ' ' + P[c[0]][1] + ' L ' + P[c[1]][0] + ' ' + P[c[1]][1]).join(' '),
+               d: P.map((p) => 'M ' + f(p[0]-r) + ' ' + p[1] + ' a ' + r + ' ' + r + ' 0 1 0 ' + f(2*r) + ' 0 a ' + r + ' ' + r + ' 0 1 0 ' + f(-2*r) + ' 0').join(' ') };
+    };
+    const cx = 880, cy = 390;
+    const pt = (r, a) => f(cx + r * Math.cos(a)) + ' ' + f(cy + r * Math.sin(a));
+    const arc = (r, a0, a1) => 'M ' + pt(r, a0) + ' A ' + r + ' ' + r + ' 0 0 1 ' + pt(r, a1);
+    let grooves = '';
+    [140, 126, 112, 98, 84, 70].forEach((r) => { grooves += 'M ' + (cx - r) + ' ' + cy + ' a ' + r + ' ' + r + ' 0 1 0 ' + (2 * r) + ' 0 a ' + r + ' ' + r + ' 0 1 0 ' + (-2 * r) + ' 0 '; });
+    const a = -0.6;
+    return {
+      accentA: this.props.accentA ?? '#22d3ee', accentB: this.props.accentB ?? '#ff4fa3', accentFx: this.props.accentFx ?? '#9d8cff',
+      accentBrake: this.props.accentBrake ?? '#f5b13d',
+      palm: skel(OPEN, 380, 450, 1.6),
+      grooves,
+      trail1: arc(162, a - 0.55, a), trail2: arc(174, a - 0.3, a),
+      mark: 'M ' + pt(12, a) + ' L ' + pt(42, a)
+    };
+  }
+}
+</script>
+</body>
+</html>

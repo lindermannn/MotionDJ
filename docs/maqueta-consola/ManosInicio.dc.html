@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MotionDJ · Modo manos inicio</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&amp;family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#07090c}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 810px; overflow: hidden; background: radial-gradient(ellipse 60% 70% at 50% 45%, #2a2f38 0%, #171b22 45%, #090b0f 100%); color: #e8edf2; font-family: Inter, system-ui, sans-serif;">
+
+  <div style="position: absolute; left: 50%; top: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 12px 14px 12px 20px; border-radius: 14px; background: rgba(12,10,28,.9); border: 2px solid {{accentFx}}; box-shadow: 0 0 24px {{accentFx}}44; white-space: nowrap;">
+    <div style="display: flex; flex-direction: column; gap: 3px;">
+      <span style="font: 700 18px/1 'Barlow Condensed', sans-serif; letter-spacing: .12em;">MODO MANOS · DECK A</span>
+      <span style="font-size: 12px; color: #b9b3e6;">esperando gesto…</span>
+    </div>
+    <div style="display: flex; gap: 6px; padding-left: 12px; border-left: 1px solid #3b3760;">
+      <span style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid #3b3760; color: #8f89b8; font-size: 12px; font-weight: 600; display: flex; align-items: center;">FILTRO · pinza</span>
+      <span style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid #3b3760; color: #8f89b8; font-size: 12px; font-weight: 600; display: flex; align-items: center;">ECO · puño</span>
+      <span style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid #3b3760; color: #8f89b8; font-size: 12px; font-weight: 600; display: flex; align-items: center;">ROLL · dedos</span>
+      <span style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid #3b3760; color: #8f89b8; font-size: 12px; font-weight: 600; display: flex; align-items: center;">FRENO · palma</span>
+    </div>
+    <button type="button" aria-pressed="true" style="height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid {{accentFx}}; background: #221d44; color: #e4defc; font-size: 12px; font-weight: 600;">● Latido</button>
+    <button type="button" style="height: 44px; padding: 0 20px; border-radius: 10px; border: 1px solid #5b5690; background: linear-gradient(180deg, #2b2752, #1a1736); color: #ffffff; font: 700 15px/1 'Barlow Condensed', sans-serif; letter-spacing: .14em;">SALIR (Esc)</button>
+  </div>
+
+  <div style="position: absolute; left: 170px; top: 150px; width: 1100px; height: 500px; box-sizing: border-box; border-radius: 22px; background: rgba(10,12,18,.88); border: 1px solid #343a52; box-shadow: 0 20px 60px rgba(0,0,0,.5);">
+    <div style="position: absolute; left: 0; right: 0; top: 30px; text-align: center; font: 700 30px/1 'Barlow Condensed', sans-serif; letter-spacing: .08em;">HAZ EL GESTO DEL EFECTO QUE QUIERAS</div>
+    <div style="position: absolute; left: 0; right: 0; top: 70px; text-align: center; font-size: 14px; color: #a9b3be;">No hay que elegir nada: el gesto activa su efecto en el deck A</div>
+    <div style="position: absolute; left: 0; top: 300px; width: 1100px; display: flex;">
+      <div style="width: 275px; text-align: center; display: flex; flex-direction: column; gap: 6px; align-items: center;">
+        <span style="font: 700 24px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; color: {{accentFx}};">FILTRO</span>
+        <span style="font-size: 14px; font-weight: 600;">Pinza con las dos manos</span>
+        <span style="font-size: 12px; color: #9aa6b2;">juntas = cerrado · separadas = abierto</span>
+      </div>
+      <div style="width: 275px; text-align: center; display: flex; flex-direction: column; gap: 6px; align-items: center;">
+        <span style="font: 700 24px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; color: {{accentA}};">ECO</span>
+        <span style="font-size: 14px; font-weight: 600;">Puño con una mano</span>
+        <span style="font-size: 12px; color: #9aa6b2;">sube = más eco · abre y lanza hacia B</span>
+      </div>
+      <div style="width: 275px; text-align: center; display: flex; flex-direction: column; gap: 6px; align-items: center;">
+        <span style="font: 700 24px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; color: {{accentRoll}};">LOOP ROLL</span>
+        <span style="font-size: 14px; font-weight: 600;">1, 2 o 3 dedos arriba</span>
+        <span style="font-size: 12px; color: #9aa6b2;">repite 1, ½ o ¼ de tiempo</span>
+      </div>
+      <div style="width: 275px; text-align: center; display: flex; flex-direction: column; gap: 6px; align-items: center;">
+        <span style="font: 700 24px/1 'Barlow Condensed', sans-serif; letter-spacing: .1em; color: {{accentBrake}};">FRENO</span>
+        <span style="font-size: 14px; font-weight: 600;">Palma de «alto», quieta</span>
+        <span style="font-size: 12px; color: #9aa6b2;">la canción frena · quítala y vuelve</span>
+      </div>
+    </div>
+    <div style="position: absolute; left: 0; right: 0; bottom: 26px; text-align: center; font-size: 12px; color: #7d8794;">El aviso se va solo a los 2,5 s o en cuanto se reconoce un gesto · saca las dos manos para volver a la consola</div>
+  </div>
+
+  <svg width="1440" height="810" viewBox="0 0 1440 810" role="img" aria-label="Cuatro gestos: pinza con dos manos, puño, dos dedos arriba y palma abierta" style="position: absolute; left: 0px; top: 0px; pointer-events: none;">
+    <circle cx="307" cy="345" r="76" fill="{{accentFx}}" opacity="0.07"></circle>
+    <circle cx="582" cy="345" r="76" fill="{{accentA}}" opacity="0.07"></circle>
+    <circle cx="857" cy="345" r="76" fill="{{accentRoll}}" opacity="0.07"></circle>
+    <circle cx="1132" cy="345" r="76" fill="{{accentBrake}}" opacity="0.07"></circle>
+    <path d="{{pinchL.l}} {{pinchR.l}} {{fist.l}} {{two.l}} {{palm.l}}" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.92"></path>
+    <path d="{{pinchL.d}} {{pinchR.d}}" fill="{{accentFx}}"></path>
+    <path d="{{fist.d}}" fill="{{accentA}}"></path>
+    <path d="{{two.d}}" fill="{{accentRoll}}"></path>
+    <path d="{{palm.d}}" fill="{{accentBrake}}"></path>
+  </svg>
+
+  <div style="position: absolute; left: 24px; bottom: 22px; display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 12px; background: rgba(8,11,15,.86); border: 1px solid {{accentA}}66;">
+    <span style="width: 26px; height: 26px; border-radius: 7px; background: {{accentA}}; color: #061218; display: flex; align-items: center; justify-content: center; font: 700 16px/1 'Barlow Condensed', sans-serif;">A</span>
+    <div style="display: flex; flex-direction: column; gap: 3px;">
+      <span style="font-size: 13px; font-weight: 600;">Luciid — Hellfire · sonando</span>
+      <span style="font-size: 11px; color: #9aa6b2;">154,1 BPM · estimado</span>
+    </div>
+  </div>
+  <div style="position: absolute; right: 24px; bottom: 22px; display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 12px; background: rgba(8,11,15,.86); border: 1px solid {{accentB}}66;">
+    <div style="display: flex; flex-direction: column; gap: 3px; align-items: flex-end;">
+      <span style="font-size: 13px; font-weight: 600;">Triptykh — Bass Keeps Going · en pausa en CUE</span>
+      <span style="font-size: 11px; color: #9aa6b2;">152,0 BPM · estimado</span>
+    </div>
+    <span style="width: 26px; height: 26px; border-radius: 7px; background: {{accentB}}; color: #1a0610; display: flex; align-items: center; justify-content: center; font: 700 16px/1 'Barlow Condensed', sans-serif;">B</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accentA":{"editor":"color","default":"#22d3ee","options":["#22d3ee","#38bdf8","#2dd4bf"]},"accentB":{"editor":"color","default":"#ff4fa3","options":["#ff4fa3","#f472b6","#fb7185"]},"accentFx":{"editor":"color","default":"#9d8cff","options":["#9d8cff","#c4b5fd","#e2e8f0"]},"accentRoll":{"editor":"color","default":"#4ade80","options":["#4ade80","#a3e635","#34d399"]},"accentBrake":{"editor":"color","default":"#f5b13d","options":["#f5b13d","#fb923c","#facc15"]},"$preview":{"width":1440,"height":810}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
+    const OPEN = [[0,110],[-38,85],[-62,55],[-78,28],[-92,4],[-30,20],[-36,-25],[-39,-55],[-42,-82],[-6,14],[-6,-36],[-6,-70],[-6,-100],[18,18],[22,-28],[24,-60],[26,-86],[38,30],[46,-4],[51,-28],[55,-50]];
+    const hand = (n) => { const H = OPEN.map((p) => p.slice()); if (n < 5) { H[1] = [-34,88]; H[2] = [-48,62]; H[3] = [-38,42]; H[4] = [-18,36]; } [5,9,13,17].forEach((m, i) => { if (i >= n && n < 5) { const b = H[m]; H[m+1] = [b[0]+6, b[1]-18]; H[m+2] = [b[0]+4, b[1]-4]; H[m+3] = [b[0], b[1]+6]; } }); return H; };
+    const PINCH = [[0,100],[-30,80],[-50,55],[-58,30],[-56,6],[-24,20],[-44,-14],[-56,-12],[-56,2],[0,14],[2,-34],[4,-62],[6,-88],[20,20],[26,-22],[30,-50],[32,-74],[36,32],[44,4],[48,-16],[52,-36]];
+    const FIST = [[420,560],[455,530],[485,500],[500,470],[488,445],[450,440],[480,420],[488,450],[470,465],[425,435],[455,410],[465,440],[448,458],[400,440],[428,415],[438,445],[420,460],[380,455],[402,432],[412,458],[396,470]].map((p) => [p[0]-442, p[1]-480]);
+    const f = (v) => Number(v.toFixed(1));
+    const skel = (H, ox, oy, s, mx) => {
+      const P = H.map((p) => [f(ox + p[0] * s * (mx || 1)), f(oy + p[1] * s)]);
+      const r = f(Math.max(2.5, 4 * s));
+      return { l: C.map((c) => 'M ' + P[c[0]][0] + ' ' + P[c[0]][1] + ' L ' + P[c[1]][0] + ' ' + P[c[1]][1]).join(' '),
+               d: P.map((p) => 'M ' + f(p[0]-r) + ' ' + p[1] + ' a ' + r + ' ' + r + ' 0 1 0 ' + f(2*r) + ' 0 a ' + r + ' ' + r + ' 0 1 0 ' + f(-2*r) + ' 0').join(' ') };
+    };
+    return {
+      accentA: this.props.accentA ?? '#22d3ee', accentB: this.props.accentB ?? '#ff4fa3', accentFx: this.props.accentFx ?? '#9d8cff',
+      accentRoll: this.props.accentRoll ?? '#4ade80', accentBrake: this.props.accentBrake ?? '#f5b13d',
+      pinchL: skel(PINCH, 268, 345, 0.6, -1), pinchR: skel(PINCH, 346, 345, 0.6, 1),
+      fist: skel(FIST, 582, 342, 0.78),
+      two: skel(hand(2), 857, 355, 0.62),
+      palm: skel(hand(5), 1137, 355, 0.62)
+    };
+  }
+}
+</script>
+</body>
+</html>

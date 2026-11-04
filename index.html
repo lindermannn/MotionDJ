@@ -12,21 +12,28 @@
 <header class="topbar">
   <div class="brand"><span class="brand-mark">M</span><div><strong>MotionDJ</strong><small>Control por manos · Web Audio · Local</small></div></div>
   <div class="top-actions">
-    <button id="btnViewEasy" class="btn view" aria-pressed="false">Vista fácil</button>
-    <button id="btnViewDJ" class="btn view" aria-pressed="true">Vista DJ</button>
+    <span class="seg" role="group" aria-label="Vista"><button id="btnViewEasy" class="btn view" aria-pressed="false">FÁCIL</button><button id="btnViewDJ" class="btn view" aria-pressed="true">DJ</button></span>
     <span class="chip" id="chipCam">Cámara: apagada</span>
     <span class="chip" id="chipGest">Gestos: pausados</span>
-    <span class="chip" id="chipFocus">Foco: —</span>
-    <button id="btnGuide" class="btn">Inicio guiado</button>
-    <button id="btnMirror" class="btn" aria-pressed="true">Cámara: ESPEJO</button>
-    <button id="btnFrame" class="btn" aria-pressed="false" title="Completa: se ve toda la cámara sin recorte. Recorte: llena la pantalla cortando bordes.">Encuadre: COMPLETO</button>
-    <button id="btnGestures" class="btn warn" aria-pressed="false">Gestos: PAUSADOS</button>
-    <button id="btnDiag" class="btn" aria-pressed="false">Diagnóstico</button>
-    <button id="btnSpectrum" class="btn" aria-pressed="true">Espectro</button>
-    <button id="btnRecord" class="btn">● Grabar mezcla</button>
     <span id="clipWarn" class="clip" style="visibility:hidden">SATURACIÓN</span>
     <span id="bassWarn" class="chip" style="visibility:hidden" title="Los dos decks tienen los graves fuertes y el crossfader está en el centro: puede sonar embarrado. Baja el LOW del que sale.">dos graves</span>
-    <button id="btnDemoGuide" class="btn">Demo guiada</button>
+    <span class="grow"></span>
+    <button id="btnGestures" class="btn warn" aria-pressed="false">Gestos: PAUSADOS</button>
+    <button id="btnRecord" class="btn rec">● Grabar mezcla</button>
+    <details class="menu" id="menuCam"><summary class="btn">📷 Cámara ▾</summary>
+      <div class="menu-pop">
+        <select id="camSelect" class="btn" title="Cámara de entrada" hidden></select>
+        <button id="btnMirror" class="btn" aria-pressed="true">Cámara: ESPEJO</button>
+        <button id="btnFrame" class="btn" aria-pressed="false" title="Completa: se ve toda la cámara sin recorte. Recorte: llena la pantalla cortando bordes.">Encuadre: COMPLETO</button>
+      </div></details>
+    <button id="btnFullscreen" class="btn" aria-pressed="false" title="Pantalla completa (tecla F)">⛶</button>
+    <button id="btnSettings" class="btn" aria-expanded="false" title="Calibración, consola, audio y diagnóstico">⚙ Ajustes</button>
+    <details class="menu" id="menuHelp"><summary class="btn">? Ayuda</summary>
+      <div class="menu-pop">
+        <button id="btnGuide" class="btn">Inicio guiado</button>
+        <button id="btnDemoGuide" class="btn">Demo guiada</button>
+        <p class="msg">Atajos: <kbd>Q</kbd>/<kbd>A</kbd> deck A · <kbd>P</kbd>/<kbd>L</kbd> deck B · <kbd>←</kbd><kbd>→</kbd> crossfader · <kbd>G</kbd> gestos · <kbd>F</kbd> pantalla completa · <kbd>Esc</kbd> salir del Modo manos</p>
+      </div></details>
   </div>
 </header>
 
@@ -36,7 +43,7 @@
     <li>2. Carga las demos o importa tu música</li>
     <li><button class="btn small" id="gCamera">3. Activar cámara</button></li>
     <li>4. Pinza sobre un control para tomarlo</li>
-    <li>5. Prueba la transición a dos manos</li>
+    <li>5. Abre MANOS · FX en un deck y elige un efecto</li>
   </ol>
   <p class="privacy">Cámara y audio se procesan <strong>localmente</strong>. Solo la primera descarga del modelo de manos requiere internet.</p>
 </section>
@@ -50,8 +57,8 @@
       <div class="mixer" id="mixer"></div>
       <div class="deck deck-b" id="deckB"></div>
     </div>
-    <div id="handCursor0" class="cursor c0"><span></span></div>
-    <div id="handCursor1" class="cursor c1"><span></span></div>
+    <div id="handCursor0" class="cursor c0"><i class="fd-l"></i><i class="fd-i"></i><i class="fd-t"></i><span></span></div>
+    <div id="handCursor1" class="cursor c1"><i class="fd-l"></i><i class="fd-i"></i><i class="fd-t"></i><span></span></div>
     <div id="focusTag" class="focus-tag" hidden></div>
     <div id="twoHandBanner" class="twohand-banner" hidden></div>
     <div id="fxPalette" class="fx-palette" hidden>
@@ -62,20 +69,117 @@
     <div id="fxChip" class="fx-chip" hidden></div>
     <div id="gesturePaused" class="paused-banner">Gestos pausados — la música sigue. Pulsa «Gestos» o la tecla G para reanudar.</div>
     <div id="noCam" class="nocam">Cámara apagada — puedes usar mouse, teclado y táctil.<br><button class="btn" id="btnCam2">Activar cámara</button></div>
-<svg id="fxArc" class="fxarc" hidden aria-hidden="true"><path id="fxArcOutline" class="arc-outline"/><path id="fxArcGlow" class="arc-glow"/><path id="fxArcCore" class="arc-core"/><path id="fxArcSecond" class="arc-second"/><g id="fxArcHands"></g><circle id="fxArcMarker" class="arc-marker" r="7" hidden/><circle id="fxArcDownbeat" class="arc-downbeat" r="11" hidden/><g id="fxArcSparks"></g></svg>
+<svg id="fxArc" class="fxarc" hidden aria-hidden="true"><path id="fxArcOutline" class="arc-outline"/><path id="fxArcGlow" class="arc-glow"/><path id="fxArcCore" class="arc-core"/><path id="fxArcSecond" class="arc-second"/><path id="ecoArrow" class="eco-arrow" hidden/><g id="ecoRings"></g><g id="rollFx"></g><g id="brakeFx"></g><g id="buildFx"></g><g id="fxArcHands"></g><g id="fxArcSparks"></g></svg>
+<div id="rollLabel" class="fxarc-label" hidden><span id="rollLabelText">ROLL A · ½ TIEMPO</span></div>
+<div id="rollBadge" class="roll-badge" hidden><strong id="rollBadgeNum">2</strong><span>dedos</span></div>
+<div id="rollPanel" class="fx-sidepanel roll-panel" hidden>
+  <h3>CUENTA DE DEDOS</h3>
+  <div class="roll-opt" data-fingers="1"><strong>1 DEDO · 1 TIEMPO</strong><span>repetición larga, suave</span></div>
+  <div class="roll-opt" data-fingers="2"><strong>2 DEDOS · ½ TIEMPO</strong><span>el redoble clásico</span></div>
+  <div class="roll-opt" data-fingers="3"><strong>3 DEDOS · ¼ TIEMPO</strong><span>redoble rápido</span></div>
+  <p>el roll suena solo mientras muestras los dedos · cambiar de dedos cambia el tamaño en el siguiente golpe</p>
+</div>
+<div id="rollWavePanel" class="fx-sidepanel roll-wave" hidden>
+  <h3>LO QUE SE OYE · <span id="rollWaveDeck">DECK A</span></h3>
+  <canvas id="rollWaveCanvas" width="330" height="96"></canvas>
+  <p>la pista sigue avanzando por debajo: al salir vuelve justo donde estaría, sin perder el compás</p>
+</div>
+<div id="brakeLabel" class="fxarc-label" hidden><span id="brakeLabelText">FRENO A · 100 %</span></div>
+<div id="brakeMeter" class="brake-meter" hidden><span>SECO</span><span class="brake-track"><i id="brakeMeterFill"></i><b id="brakeMeterTick"></b></span><span>LARGO</span><small>altura de la palma = largo del freno</small></div>
+<div id="brakePanel" class="fx-sidepanel brake-panel" hidden>
+  <h3>CURVA DEL FRENO</h3>
+  <canvas id="brakeCurveCanvas" width="280" height="130"></canvas>
+  <p>palma arriba = 1 tiempo (seco) · abajo = 3 tiempos (largo)</p>
+  <div class="brake-speed"><span>VELOCIDAD DEL DECK <b id="brakeSpeedDeck">A</b></span><strong id="brakeSpeedVal">100 %</strong><span class="brake-speedbar"><i id="brakeSpeedFill"></i></span></div>
+</div>
+<div id="rollHint" class="eco-hint roll-hint" hidden>baja los dedos (puño o mano abierta) o quita la mano = la canción sigue normal en el golpe</div>
+<div id="buildLabel" class="fxarc-label" hidden><span id="buildLabelText">SUBIDA A</span></div>
+<div id="buildHint" class="eco-hint build-hint" hidden></div>
+<div id="brakeHint" class="eco-hint brake-hint" hidden>quita o cierra la mano = vuelve en el siguiente golpe, en su sitio</div>
 <div id="fxArcLabel" class="fxarc-label" hidden><span id="fxArcLabelText">FILTRO A · LP 40 %</span><span class="fxarc-bar"><i id="fxArcBarFill"></i></span></div>
-<div id="fxArcBeatTag" class="fxarc-beattag" hidden>tiempo 1 en 2 golpes · separa aquí</div>
+<div id="ecoLabel" class="fxarc-label" hidden><span id="ecoLabelText">ECO A · ½ TIEMPO · 0 %</span></div>
+<div id="ecoMeter" class="eco-meter" hidden><span>MÁS ECO</span><span class="eco-track"><i id="ecoMeterFill"></i><b id="ecoMeterTick"></b></span><span>MENOS</span><small>altura del puño = cantidad</small></div>
+<div id="ecoHintThrow" class="eco-hint eco-hint-throw" hidden>👍 pulgar arriba = lanzar a <b id="ecoHintDeck">B</b></div>
+<div id="ecoHintCancel" class="eco-hint eco-hint-cancel" hidden>abrir o bajar la mano = cancelar</div>
+<div id="gestureIntro" class="gesture-intro" hidden>
+  <h2>ELIGE UN EFECTO CON PINZA</h2>
+  <p>Pellizca una tarjeta (o haz clic): el efecto queda fijo en el deck <b id="gestureIntroDeck">A</b>; para cambiarlo, pellizca otro arriba</p>
+  <div class="gesture-cards">
+    <button type="button" data-pick="filter" class="g-card g-card-fx"><strong class="g-fx">FILTRO</strong><span>Pinza con las dos manos</span><small>juntas = cerrado · separadas = abierto</small></button>
+    <button type="button" data-pick="eco" class="g-card g-card-eco"><strong class="g-eco">ECO</strong><span>Puño con una mano</span><small>sube = más eco · 👍 lanza a <b id="gestureIntroTarget">B</b></small></button>
+    <button type="button" data-pick="roll" class="g-card g-card-roll"><strong class="g-roll">LOOP ROLL</strong><span>1, 2 o 3 dedos arriba</span><small>repite 1, ½ o ¼ de tiempo · cierra o quita la mano y sigue normal</small></button>
+    <button type="button" data-pick="brake" class="g-card g-card-brake"><strong class="g-brake">FRENO</strong><span>Palma de «alto», quieta</span><small>la canción frena · quítala y vuelve en el golpe</small></button>
+    <button type="button" data-pick="stems" class="g-card g-card-stems"><strong class="g-stems">STEMS</strong><span>Pellizca VOZ · BATERÍA · BAJO · RESTO</span><small>Meta Demucs separa la canción · dos pinzas = volumen</small></button>
+    <button type="button" data-pick="build" class="g-card g-card-build"><strong class="g-build">SUBIDA</strong><span>Dos manos abiertas · súbelas</span><small>la batería se acelera y la voz queda sola · 🙏 júntalas = DROP</small></button>
+  </div>
+  <p class="gesture-foot">El menú se cierra a los 10 s; también puedes elegir pellizcando la barra de arriba · saca las dos manos para volver a la consola</p>
+</div>
+<div id="ecoNotice" class="eco-notice" hidden></div>
+<div id="ecoLaunchFx" class="eco-launchfx" hidden><span class="eco-tail"><small>COLA DE ECO</small><span class="eco-bars" id="ecoTailBars"><i></i><i></i><i></i><i></i><i></i><i></i></span></span><span class="eco-cross"><small id="ecoCrossText">CROSSFADER · pasa solo a B</small><span class="eco-crossbar"><b>A</b><span><i id="ecoCrossThumb"></i></span><b>B</b></span></span></div>
 <div id="hmDeckCard" class="hm-deckcard" hidden><span class="badge" id="hmDeckBadge">A</span><span class="hm-deckmeta"><strong id="hmDeckTrack">Sin pista</strong><small id="hmDeckBpm">— BPM · estimado</small></span><span class="hm-beats" id="hmBeats" aria-label="Compás de 4 tiempos"><i></i><i></i><i></i><i></i></span></div>
+<div id="hmTargetCard" class="hm-deckcard hm-targetcard" hidden><span class="hm-deckmeta"><strong id="hmTargetTrack">Sin pista</strong><small id="hmTargetState">carga una pista para lanzar</small></span><span class="badge" id="hmTargetBadge">B</span></div>
+<!-- Panel STEMS: una tarjeta por deck con stems (dos = vista mashup); las rellena main.js. -->
+<div id="roomTint" class="room-tint" hidden></div>
+<div id="stemsPanel" class="stems-panel" hidden>
+  <div class="stems-deck" data-deck="0"></div>
+  <div class="stems-mid" id="stemsMid">
+    <strong id="mashupLabel" hidden>MASHUP EN VIVO</strong>
+    <span class="stems-xlabels"><b>A</b><span id="stemsXVal">A 50 % · B 50 %</span><b>B</b></span>
+    <input id="stemsCross" class="stems-cross" type="range" min="-1" max="1" step="0.01" value="0" data-g="range" data-param="cross" aria-label="Crossfader">
+    <span class="stems-xfer"><button type="button" class="stems-xbtn" data-xfer="0">◀ A</button><button type="button" class="stems-xbtn" data-xfer="1">B ▶</button></span>
+    <small>SYNC + cambio en 8 golpes · stems separados por Meta Demucs</small>
+  </div>
+  <div class="stems-deck" data-deck="1"></div>
+</div>
 <div id="hmExitHint" class="hm-exithint" hidden>Saca las dos manos de la pantalla para volver a la consola</div>
 <div id="hmHandMsg" class="hm-handmsg" hidden>falta una mano</div>
 <div id="handModeBar" class="handmode-bar" hidden>
-  <span class="hm-titlewrap"><strong id="handModeTitle">MODO MANOS · FILTRO A</strong><span class="hm-help">Pinza con las dos manos · junta para cerrar · separa en el golpe · saca las manos para salir</span></span>
-  <span class="hm-toggles">
-    <label class="hm-toggle"><input type="checkbox" id="hmBeat" checked> Latido</label>
-    <label class="hm-toggle"><input type="checkbox" id="hmParticles"> Partículas</label>
-    <label class="hm-toggle"><input type="checkbox" id="hmHighpass"> Pasa-altos</label>
+  <span class="hm-titlewrap"><strong id="handModeTitle">MODO MANOS · FILTRO A</strong><span class="hm-help" id="hmHelp">Pinza con las dos manos · junta para cerrar · separa en el golpe</span></span>
+  <!-- Perillas del canal que mueve el gesto de dos pinzas (solo en FILTRO); se eligen con pinza. -->
+  <span class="hm-knobs" id="hmKnobs" role="group" aria-label="Perilla que mueven las dos pinzas" hidden>
+    <button type="button" class="hm-knob" data-knob="high">HIGH</button>
+    <button type="button" class="hm-knob" data-knob="mid">MID</button>
+    <button type="button" class="hm-knob" data-knob="low">LOW</button>
+    <button type="button" class="hm-knob" data-knob="trim">TRIM</button>
+    <button type="button" class="hm-knob" data-knob="filter">FILTRO <span class="hm-knob-deck">A</span></button>
+    <button type="button" class="hm-knob" data-knob="eco">ECO <span class="hm-knob-deck">A</span></button>
   </span>
-  <label class="hm-slider">Sin manos: <input id="hmApertura" type="range" min="0" max="100" step="1" value="100" data-g="range" title="Apertura con el ratón"></label>
+  <!-- STEMS del deck activo (Meta Demucs): pellizcar apaga/enciende en el golpe y elige el stem de las dos pinzas. -->
+  <span class="hm-stems" id="hmStems" role="group" aria-label="Stems del deck" hidden>
+    <button type="button" class="hm-stem" data-stem="0" style="--sc:#FACC15">VOZ</button>
+    <button type="button" class="hm-stem" data-stem="1" style="--sc:#FB923C">BATERÍA</button>
+    <button type="button" class="hm-stem" data-stem="2" style="--sc:#60A5FA">BAJO</button>
+    <button type="button" class="hm-stem" data-stem="3" style="--sc:#2DD4BF">RESTO</button>
+  </span>
+  <!-- ROLL / ECO / FRENO con stems (MÚSICA = todo menos la voz, solo FRENO): sobre qué parte actúa el efecto (TODO = la pista entera). -->
+  <span class="hm-stems hm-target" id="hmTarget" role="group" aria-label="Parte sobre la que actúa el efecto" hidden>
+    <small>SOBRE</small>
+    <button type="button" class="hm-stem" data-target="-2" style="--sc:#A78BFA" hidden>MÚSICA</button>
+    <button type="button" class="hm-stem" data-target="-1" style="--sc:#e8edf2">TODO</button>
+    <button type="button" class="hm-stem" data-target="0" style="--sc:#FACC15">VOZ</button>
+    <button type="button" class="hm-stem" data-target="1" style="--sc:#FB923C">BATERÍA</button>
+    <button type="button" class="hm-stem" data-target="2" style="--sc:#60A5FA">BAJO</button>
+    <button type="button" class="hm-stem" data-target="3" style="--sc:#2DD4BF">RESTO</button>
+  </span>
+  <!-- Indicador del efecto en uso: no se pellizca ni se pulsa (se elige en el menú de entrada). -->
+  <span class="hm-selector" role="status" aria-label="Efecto en uso">
+    <span id="fxSelFilter" class="hm-sel hm-sel-fx">FILTRO</span>
+    <span id="fxSelEco" class="hm-sel hm-sel-eco">ECO</span>
+    <span id="fxSelRoll" class="hm-sel hm-sel-roll">ROLL</span>
+    <span id="fxSelBrake" class="hm-sel hm-sel-brake">FRENO</span>
+    <span id="fxSelStems" class="hm-sel hm-sel-stems">STEMS</span>
+    <span id="fxSelBuild" class="hm-sel hm-sel-build">SUBIDA</span>
+  </span>
+  <!-- Latido fijo encendido; partículas y pasa-altos fijos apagados (ocultos para la demo). -->
+  <span class="hm-toggles" hidden>
+    <label class="hm-toggle"><input type="checkbox" id="hmBeat" checked> Latido</label>
+    <span id="hmFilterExtras" class="hm-extras">
+      <label class="hm-toggle"><input type="checkbox" id="hmParticles"> Partículas</label>
+      <label class="hm-toggle"><input type="checkbox" id="hmHighpass"> Pasa-altos</label>
+    </span>
+  </span>
+  <label class="hm-slider" hidden><span id="hmSliderLabel">Sin manos:</span> <input id="hmApertura" type="range" min="0" max="100" step="1" value="100" data-g="range" title="Sustituto con el ratón"></label>
+  <button class="btn small" id="hmLaunchBtn" type="button" hidden>Lanzar (simulado)</button>
   <button class="btn hm-exit" id="handModeExit">SALIR (Esc)</button>
 </div>
 <div id="demoGuide" class="picker" hidden>
@@ -98,10 +202,10 @@
 </main>
 
 <div class="spectrum-wrap" id="spectrumWrap"><canvas id="spectrum" width="1200" height="72"></canvas></div>
+<div id="msgBar" class="msgbar"><p id="status" class="msg" role="status">Listo. Activa audio para empezar.</p></div>
 <div class="layout">
-  <div class="col">
     <div class="panel library">
-      <h2>Biblioteca de música</h2>
+      <div class="lib-head"><h2>Biblioteca de música</h2><span class="grow"></span><button class="btn small" id="btnLibExpand" aria-pressed="false" title="Más espacio para preparar el lineup (como VIEW en rekordbox)">⤢ Ampliar biblioteca</button></div>
       <div class="row">
         <label class="btn small file-btn">Importar música<input id="fileImport" type="file" accept="audio/*" multiple hidden></label>
         <button class="btn small" id="btnDemo">Cargar demos</button>
@@ -109,39 +213,75 @@
         <button class="btn small" id="btnFolderOpen">Reabrir carpeta</button>
         <input id="search" type="search" placeholder="Buscar pista…" aria-label="Buscar pista">
       </div>
-      <ul id="trackList" class="track-list"></ul>
-    <div class="row"><button class="btn" id="btnNextTrack">Siguiente ▶ (deck libre)</button></div>
-    <p id="queueInfo" class="msg">Cola vacía: añade pistas con «+ cola». Cada deck lleva una pista; la siguiente va al otro deck mientras suena el primero.</p>
-    <ul id="queueList"></ul>
-      <div class="row">
-        <button class="btn load-a" id="loadA">LOAD A</button>
-        <button class="btn load-b" id="loadB">LOAD B</button>
-        <span id="libMsg" class="msg" role="status"></span>
+      <div class="lib-body">
+        <div class="lib-table">
+          <div class="lib-row lib-th" id="trackHead"><span>#</span><button type="button" data-sort="name">TÍTULO</button><button type="button" data-sort="bpm">BPM</button><button type="button" data-sort="dur">DURACIÓN</button><span>STEMS</span><span>ESTADO</span><span>AGREGAR A COLA</span></div>
+          <ul id="trackList" class="track-list"></ul>
+          <div class="row">
+            <button class="btn load-a" id="loadA">LOAD A</button>
+            <button class="btn load-b" id="loadB">LOAD B</button>
+            <span id="libMsg" class="msg" role="status"></span>
+          </div>
+        </div>
+        <div class="lib-queues">
+          <div class="dq dq-a"><h3>COLA A</h3><ol id="queueA"></ol></div>
+          <div class="dq dq-b"><h3>COLA B</h3><ol id="queueB"></ol></div>
+          <p id="queueInfo" class="msg"></p>
+          <button class="btn small" id="btnNextTrack" title="Carga ya el siguiente de su cola en cada deck libre">Cargar siguientes ahora</button>
+        </div>
       </div>
-      <p class="msg easy-only">Vista fácil: elige una pista, pulsa LOAD A o LOAD B y luego PLAY en ese deck. Mueve el CROSSFADER para mezclar.</p>
-      <div class="row easy-only"><button class="btn" id="btnEasyMix">Igualar y mezclar</button><span class="msg">Iguala el tempo del deck parado con el que suena y hace la mezcla suave.</span></div>
+      <p class="msg easy-only">Vista fácil: elige una pista, pulsa LOAD A o LOAD B y luego PLAY en ese deck. Mueve el CROSSFADER para mezclar, o usa AUTO DJ en el mezclador.</p>
     </div>
-    <details class="panel dj-only">
-      <summary>Calibración y estado</summary>
+</div>
+
+<!-- Ajustes (como el «Setup» de Serato/rekordbox): fuera de la vista de actuación. -->
+<aside id="settingsDrawer" class="drawer" hidden aria-label="Ajustes">
+  <div class="drawer-head"><h2>Ajustes</h2><span class="grow"></span><button class="btn small" id="btnSettingsClose">Cerrar ✕</button></div>
+  <details class="drawer-group" open><summary>Cámara y manos</summary>
       <label>Escala <input id="calScale" type="range" min="0.7" max="1.15" step="0.01" value="1"></label>
       <label>Horizontal <input id="calX" type="range" min="-120" max="120" step="1" value="0"></label>
       <label>Vertical <input id="calY" type="range" min="-80" max="80" step="1" value="0"></label>
       <label>Sensibilidad pinza <input id="calSens" type="range" min="0.25" max="0.55" step="0.01" value="0.38"></label>
-      <label>Tamaño controles <input id="calSize" type="range" min="0.9" max="1.3" step="0.05" value="1"></label>
       <label>Ampliación zonas gestuales <input id="calHit" type="range" min="0" max="28" step="2" value="16"></label>
-      <label>Recorrido de perilla: <span id="calKnobVal">220</span> px para todo el rango <input id="calKnob" type="range" min="120" max="420" step="20" value="220"></label>
-      <label>Opacidad de la mesa <input id="calOpacity" type="range" min="0.45" max="1" step="0.05" value="0.86"></label>
-      <div class="row"><button class="btn small" id="btnLock">Bloquear mesa</button><button class="btn small" id="btnZoomMixer">Ampliar mixer</button><button class="btn small" id="btnReset">Restablecer todo</button></div>
-      <label>Segundos por vuelta del jog (búsqueda) <input id="calJogSec" type="range" min="0.6" max="3.6" step="0.2" value="1.8"></label>
       <label>Margen de salida del Modo manos: <span id="calHandExitVal">180</span> ms <input id="calHandExit" type="range" min="0" max="1000" step="20" value="180"></label>
-      <p class="msg">Salidas del Modo manos por sacar las manos (sesión): <span id="diagHandExits">0</span> · Coste del arco: <span id="diagArcMs">—</span></p>
-      <div class="row"><button class="btn small" id="btnTestArc" type="button">Probar arco</button><span class="msg">Dibuja el arco entre dos puntos fijos sin cámara (5 s).</span></div>
+  </details>
+  <details class="drawer-group"><summary>Consola</summary>
+      <label>Tamaño controles <input id="calSize" type="range" min="0.9" max="1.3" step="0.05" value="1"></label>
+      <label>Opacidad de la mesa <input id="calOpacity" type="range" min="0.45" max="1" step="0.05" value="0.86"></label>
+      <label>Recorrido de perilla: <span id="calKnobVal">220</span> px para todo el rango <input id="calKnob" type="range" min="120" max="420" step="20" value="220"></label>
+      <label>Segundos por vuelta del jog (búsqueda) <input id="calJogSec" type="range" min="0.6" max="3.6" step="0.2" value="1.8"></label>
       <label><input type="checkbox" id="calSnap"> Imán a golpe al soltar la búsqueda con el jog</label>
-      <p id="status" class="msg" role="status">Listo. Activa audio para empezar.</p>
-      <p class="msg">Atajos: <kbd>Q</kbd>/<kbd>A</kbd> deck A · <kbd>P</kbd>/<kbd>L</kbd> deck B · <kbd>←</kbd><kbd>→</kbd> crossfader · <kbd>G</kbd> gestos · <kbd>C</kbd> garra</p>
-    </details>
-  </div>
-  <div class="col">
+      <div class="row"><button class="btn small" id="btnLock">Bloquear mesa</button><button class="btn small" id="btnZoomMixer">Ampliar mixer</button><button class="btn small" id="btnReset">Restablecer todo</button></div>
+  </details>
+  <details class="drawer-group"><summary>Auto DJ</summary>
+      <p class="msg">Se enciende con AUTO DJ en el mezclador. Alterna A → B → A cerca del final de la pista activa, solo si el deck de destino ya tiene una pista cargada. El BPM es estimado: SYNC iguala el tempo efectivo y alinea la fase con la rejilla estimada, sin prometer beatmatching perfecto.</p>
+      <div class="row"><span class="chip" id="autoDjActive">Activo: —</span><span class="chip" id="autoDjNext">Destino: —</span></div>
+      <label>Anticipación: <span id="autoDjAntVal">15</span> s antes del final
+        <input id="autoDjAnt" type="range" min="5" max="60" step="1" value="15"></label>
+      <label>Duración de la transición
+        <select id="autoDjDuration"><option value="4000">4 s</option><option value="8000" selected>8 s</option><option value="16000">16 s</option></select></label>
+      <div class="row"><button class="btn small" id="btnAutoDjCancel" disabled>Pausar / cancelar</button></div>
+      <p id="autoDjStatus" class="msg">Auto DJ desactivado. El control manual sigue activo.</p>
+  </details>
+  <details class="drawer-group"><summary>Preescucha en auriculares</summary>
+      <p class="msg">Escucha en unos auriculares el deck que no suena en los altavoces mientras buscas su punto de entrada. La mezcla sale por la salida predeterminada de Windows (tu óptica) y la preescucha por la que elijas aquí (tu jack); la grabación no la incluye.</p>
+      <div class="row"><button class="btn" id="btnCueDevices">Elegir auriculares…</button><select id="cueDevice" aria-label="Salida de auriculares"><option value="">Elegir en la lista…</option></select></div>
+      <label>Volumen de auriculares <input id="cueVol" type="range" min="0" max="1" step="0.01" value="0.8"></label>
+      <audio id="cueAudio" autoplay></audio>
+      <p id="cueStatus" class="msg">Preescucha: apagada. Pulsa «Elegir auriculares…» y selecciona «Altavoces (Realtek…)» (el jack); deja en Windows la óptica como salida predeterminada para la mezcla.</p>
+  </details>
+  <details class="drawer-group"><summary>Diagnóstico</summary>
+      <div class="row"><button id="btnDiag" class="btn small" aria-pressed="false">Diagnóstico de manos</button><button id="btnSpectrum" class="btn small" aria-pressed="true">Espectro</button><button class="btn small" id="btnTestArc" type="button">Probar arco</button></div>
+      <p class="msg">Salidas del Modo manos por sacar las manos (sesión): <span id="diagHandExits">0</span> · Coste del arco: <span id="diagArcMs">—</span></p>
+      <p class="msg" id="stateDetail">Cámara: — · Foco: — · Garra: —</p>
+      <p class="msg" id="stateCaps">Preescucha: experimental (panel de auriculares). Jog: búsqueda con audio atrás/adelante y empuje. SYNC: tempo efectivo + fase con la rejilla estimada. Sin tonalidad calculada.</p>
+      <p class="msg"><span class="chip" id="chipFocus">Foco: —</span></p>
+  </details>
+</aside>
+
+<!-- Retirados de la interfaz (reemplazados por el Modo manos). Se conservan
+     ocultos porque el codigo los busca por id; recuperarlos es moverlos. -->
+<div id="retired" hidden>
     <div class="panel">
       <h2>Transición a dos manos (experimental)</h2>
       <p class="msg">«Mezcla suave»: crossfader + graves del deck que sale + eco breve. Sin sincronización de golpes.</p>
@@ -159,19 +299,6 @@
       <p class="msg">El volumen general es la perilla MASTER del mezclador.</p>
     </div>
     <div class="panel">
-      <h2>Auto DJ (básico)</h2>
-      <p class="msg">Alterna A → B → A cerca del final de la pista activa, solo si el deck de destino ya tiene una pista cargada. No reemplaza la pista que suena. El BPM es estimado: SYNC iguala el tempo efectivo y alinea la fase con la rejilla estimada, sin prometer beatmatching perfecto.</p>
-      <label><input type="checkbox" id="autoDjEnabled"> Activar Auto DJ</label>
-      <div class="row"><span class="chip" id="autoDjActive">Activo: —</span><span class="chip" id="autoDjNext">Destino: —</span></div>
-      <label>Anticipación: <span id="autoDjAntVal">15</span> s antes del final
-        <input id="autoDjAnt" type="range" min="5" max="60" step="1" value="15"></label>
-      <label>Duración de la transición
-        <select id="autoDjDuration"><option value="4000">4 s</option><option value="8000" selected>8 s</option><option value="16000">16 s</option></select></label>
-      <div class="row"><button class="btn" id="btnAutoDjNow" disabled>Transición ahora</button><button class="btn" id="btnAutoDjCancel" disabled>Pausar / cancelar</button></div>
-      <p id="autoDjStatus" class="msg">Auto DJ desactivado. El control manual sigue activo.</p>
-      <p class="msg">Límites: si la anticipación es menor que la duración, la mezcla puede terminar después de que acabe la pista. Pausar devuelve el control manual sin cambiar valores.</p>
-    </div>
-    <div class="panel">
       <h2>Efectos a dos pinzas (prototipo)</h2>
       <p class="msg">Seleccionar y preparar <strong>no cambia el audio</strong>. Con el efecto preparado, haz pinza con cada mano en el aire (sin apuntar a un control): la mano de la izquierda sube/baja la cantidad; en Eco, separar las manos sube la realimentación. Soltar o perder una mano congela el valor. Teclas: <kbd>E</kbd> paleta · <kbd>Enter</kbd> preparar · <kbd>Esc</kbd> cerrar/congelar · <kbd>X</kbd> despreparar.</p>
       <label><input type="checkbox" id="fxEnabled"> Mostrar efectos a dos pinzas</label>
@@ -185,14 +312,6 @@
         <label>Ajuste manual (mouse/táctil) <input id="fxManual" type="range" min="-50" max="50" step="1" value="0"></label>
         <p id="fxStatus" class="msg">Efecto seleccionado: Filtro · Deck A. Sin efecto en el audio por ahora.</p>
       </div>
-    </div>
-    <div class="panel">
-      <h2>Preescucha en auriculares (experimental)</h2>
-      <p class="msg">Escucha en unos auriculares el deck que no suena en los altavoces mientras buscas su punto de entrada. La mezcla sale por la salida predeterminada de Windows (tu óptica) y la preescucha por la que elijas aquí (tu jack); la grabación no la incluye.</p>
-      <div class="row"><button class="btn" id="btnCueDevices">Elegir auriculares…</button><select id="cueDevice" aria-label="Salida de auriculares"><option value="">Elegir en la lista…</option></select></div>
-      <label>Volumen de auriculares <input id="cueVol" type="range" min="0" max="1" step="0.01" value="0.8"></label>
-      <audio id="cueAudio" autoplay></audio>
-      <p id="cueStatus" class="msg">Preescucha: apagada. Pulsa «Elegir auriculares…» y selecciona «Altavoces (Realtek…)» (el jack); deja en Windows la óptica como salida predeterminada para la mezcla.</p>
     </div>
     <details class="panel experimental">
       <summary>Garra de cinco dedos (experimental, en revisión)</summary>
@@ -215,12 +334,6 @@
       <p class="msg">Guía: deja la mano visible y sin pinza medio segundo para enganchar (sin saltos). Mano abierta sube el valor; puño lo baja. Al perder la mano, el valor se queda donde está.</p>
       <p class="msg">Aislamiento: la garra solo corre con exactamente una mano libre, sin pinza, sin controles tomados y sin gestos a dos manos ni transiciones en curso. En cualquier otro caso se suelta y no toca el audio.</p>
     </details>
-    <div class="panel">
-      <h2>Estado</h2>
-      <p class="msg" id="stateDetail">Cámara: — · Foco: — · Garra: —</p>
-      <p class="msg" id="stateCaps">Preescucha: experimental (panel de auriculares). Jog: búsqueda con audio atrás/adelante y empuje. SYNC: tempo efectivo + fase con la rejilla estimada. Sin tonalidad calculada.</p>
-    </div>
-  </div>
 </div>
 <footer class="foot">MotionDJ · Identidad propia · La webcam no detecta contacto físico ni profundidad precisa: gestos estimados en 2D.</footer>
 <script type="module" src="/src/app/main.js"></script>

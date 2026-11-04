@@ -70,9 +70,23 @@ export function knobValue(control, y, current) {
 }
 // Perilla con arrastre horizontal relativo: empieza en el valor actual
 // (dx=0 => sin salto) y recorre el rango completo en pxFull pixeles.
+// Posicion de la perilla [0..1]. Si el rango cruza 0 (EQ de -26 a +6 dB),
+// el 0 queda SIEMPRE al centro, arriba, como en una mesa real: cada lado
+// tiene su propia escala. Con rango simetrico es igual a lineal.
+export function knobPos01(value, min, max) {
+  if (!(max > min)) return 0;
+  const v = clamp(Number(value) || 0, min, max);
+  if (min < 0 && max > 0) return v < 0 ? 0.5 * (v - min) / -min : 0.5 + 0.5 * v / max;
+  return (v - min) / (max - min);
+}
+export function knobValueAt(pos01, min, max) {
+  const f = clamp(pos01);
+  if (min < 0 && max > 0) return f < 0.5 ? min + (f / 0.5) * -min : ((f - 0.5) / 0.5) * max;
+  return min + f * (max - min);
+}
 export function knobDragValue(startValue, dxPx, min, max, pxFull = 220) {
   const px = pxFull > 0 ? pxFull : 220;
-  return clamp(startValue + (dxPx / px) * (max - min), min, max);
+  return clamp(knobValueAt(knobPos01(startValue, min, max) + dxPx / px, min, max), min, max);
 }
 // Scratch minimo por velocidad: el jog gira a revPerSec vueltas/s y cada
 // vuelta equivale a secPerRev segundos de pista. Sin velocidad negativa:
@@ -129,8 +143,7 @@ export function waveDragPosition(startPos, dxPx, duration, pxPer10s = 220) {
 }
 // Angulo de la aguja de una perilla: -135° (min) .. +135° (max).
 export function knobAngle(value, min, max) {
-  const f = max > min ? clamp((value - min) / (max - min)) : 0;
-  return -135 + f * 270;
+  return -135 + knobPos01(value, min, max) * 270;
 }
 // Amplia una zona de interaccion y garantiza un tamano minimo (44px recomendado).
 export function expandRect(r, pad = 14, minW = 44, minH = 40) {

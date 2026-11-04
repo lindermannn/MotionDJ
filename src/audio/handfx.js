@@ -100,6 +100,17 @@ export function filterColor(filter, highpass = false) {
   const rgb = a.map((v, i) => Math.round(v + (b[i] - v) * f));
   return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
 }
+// El gesto elige el efecto (4B-B): pinza con las dos manos -> FILTRO,
+// puno con una mano -> ECO. Si un efecto esta en uso (busy), el otro
+// gesto no activa nada. La pinza manda si ambos llegan a la vez.
+export function gestureEffectChoice({ doublePinchGrabbed = false, fistGrabbed = false, fingers = null, palmBrake = false, palmSuppressed = false, busy = false } = {}) {
+  if (busy) return null;
+  if (doublePinchGrabbed) return 'filter';
+  if (fistGrabbed) return 'eco';
+  if (fingers === 1 || fingers === 2 || fingers === 3) return 'roll';
+  if (palmBrake && !palmSuppressed) return 'brake';
+  return null; // 0 ya lo cubre el puno/ECO; 4 dedos = zona muerta
+}
 // Salida instantanea: sin ninguna mano durante marginMs -> salir.
 // Solo tras haber visto manos (entrar y levantarlas no es "sacarlas")
 // y nunca si el usuario esta usando el sustituto mouse/teclado.

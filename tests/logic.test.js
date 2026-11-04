@@ -217,8 +217,8 @@ test('selector de efectos: recorrer no toca parametros y conserva el deck', asyn
 });
 test('Channel: position() continua tras cambio de rate, siguiendo la rampa real', async () => {
   const { Channel } = await import('../src/audio/engine.js');
-  const node = () => ({ connect() {}, gain: { value: 0, setTargetAtTime() {} }, frequency: { value: 0, setTargetAtTime() {} }, Q: { value: 0 } });
-  const ctx = { currentTime: 0, createGain: node, createBiquadFilter: node, createAnalyser: node,
+  const node = () => ({ connect() {}, disconnect() {}, gain: { value: 0, setTargetAtTime() {}, cancelScheduledValues() {}, setValueAtTime() {}, linearRampToValueAtTime() {} }, frequency: { value: 0, setTargetAtTime() {} }, Q: { value: 0 } });
+  const ctx = { currentTime: 0, createGain: node, createBiquadFilter: node, createAnalyser: node, createChannelSplitter: node, createChannelMerger: node,
     createBufferSource: () => ({ buffer: null, playbackRate: { value: 1, setTargetAtTime() {} }, connect() {}, start() {}, stop() {}, onended: null, loop: false }) };
   const ch = new Channel(ctx, node());
   ch.load({ duration: 100 });
@@ -281,8 +281,19 @@ test('beatgrid: criterio musical de octava para musica de baile (132 leido a 66)
   assert.equal(musicalOctave(66, -0.01), 66); // sin soporte: se queda
   assert.equal(musicalOctave(66, 0.54), 132);
   assert.equal(musicalOctave(66, 0.78), 132);
-  assert.equal(musicalOctave(100, 0.9), 100); // >=90 no se toca
-  assert.equal(musicalOctave(44, 0.9), 44); // el doble (88) queda fuera de 90-180
+  assert.equal(musicalOctave(100, 0.9), 100); // dentro de rango sin fraccion mejor: no se toca
+  assert.equal(musicalOctave(44, 0.9), 88); // rango musical nuevo ~70-180 (antes 90-180)
+  assert.equal(musicalOctave(34, 0.9), 34); // el doble (68) queda fuera de ~70-180
+  const { musicalOctaveChoice } = await import('../src/audio/beatgrid.js');
+  // Elige el factor con mejor evidencia: x3 gana a x2 cuando s3 manda.
+  assert.ok(Math.abs(musicalOctaveChoice(53.3, { s2: -0.02, s3: 0.32 }).bpm - 159.9) < 1e-9);
+  assert.equal(musicalOctaveChoice(53.3, { s2: -0.02, s3: 0.32 }).factor, 3);
+  assert.equal(musicalOctaveChoice(53.5, { s2: 0.34, s3: -0.01 }).factor, 2);
+  assert.equal(musicalOctaveChoice(53.3, { s2: -0.01, s3: -0.01 }).factor, 1); // lento de verdad
+  assert.equal(musicalOctaveChoice(53.3, { s2: 0.10, s3: 0.15 }).factor, 1); // flojo: marca posible fraccion
+  assert.equal(musicalOctaveChoice(212, { sHalf: 0.9 }).bpm, 106); // doble por arriba
+  assert.equal(musicalOctaveChoice(160, { sHalf: 0.94 }).factor, 1); // en rango: nunca partir
+  assert.equal(musicalOctaveChoice(212, { sHalf: 0.3 }).factor, 1); // sin evidencia no parte
   const sr = 44100, synth = (bpm, accent) => {
     const data = new Float32Array(sr * 12), beat = 60 / bpm;
     const kick = (t0, amp) => { const n0 = Math.floor(t0 * sr); for (let i = 0; i < sr * 0.12 && n0 + i < data.length; i++) { const tt = i / sr; data[n0 + i] += Math.sin(2 * Math.PI * (58 - tt * 160) * tt) * Math.exp(-tt * 28) * amp; } };
@@ -315,6 +326,23 @@ test('beatgrid: criterio musical de octava para musica de baile (132 leido a 66)
     const r = analyzeBeatgrid(weakSynth(bpm, 0.95), sr);
     assert.ok(Math.abs(r.bpm - bpm) <= 0.4, ` lento uniforme ${bpm}: ${r.bpm}`);
   }
+  // Correccion A: 160 con acento cada 3 y golpes debiles (candidato 53,3)
+  // debe leerse ~160 por el tercio; 107 debil debe leerse ~107 por mitad.
+  const thirdSynth = (bpm, weak) => {
+    const data = new Float32Array(sr * 12), beat = 60 / bpm;
+    const kick = (t0, amp) => { const n0 = Math.floor(t0 * sr); for (let i = 0; i < sr * 0.12 && n0 + i < data.length; i++) { const tt = i / sr; data[n0 + i] += Math.sin(2 * Math.PI * (58 - tt * 160) * tt) * Math.exp(-tt * 28) * amp; } };
+    let k = 0; for (let tt = 0.21; tt < 12; tt += beat, k++) kick(tt, k % 3 ? weak : 0.95);
+    return data;
+  };
+  for (const weak of [0.12, 0.16, 0.2]) {
+    const r = analyzeBeatgrid(thirdSynth(160, weak), sr);
+    assert.ok(Math.abs(r.bpm - 160) <= 0.7, ` 160 debil ${weak} (antes 53,3): ${r.bpm}`);
+  }
+  const r107 = analyzeBeatgrid(weakSynth(107, 0.16), sr);
+  assert.ok(Math.abs(r107.bpm - 107) <= 0.7, ` 107 debil (antes 53,5): ${r107.bpm}`);
+  // 160 uniforme se lee 160 (no se parte ni se tercia).
+  const r160 = analyzeBeatgrid(thirdSynth(160, 0.95), sr);
+  assert.ok(Math.abs(r160.bpm - 160) <= 0.7, ` 160 uniforme: ${r160.bpm}`);
 });
 test('beatgrid: cuantizacion, alineacion de fase, TAP y tiempo de eco', async () => {
   const { quantizeToBeat, beatPhase01, alignToPhase, tapTempo, beatDelayTime } = await import('../src/audio/beatgrid.js');
@@ -382,6 +410,9 @@ test('perillas: dos manos en dos perillas, rangos EQ/Trim y filtro bipolar', () 
   assert.equal(knobDragValue(1, -55, 0, 2, 220), 0.5);
   assert.equal(knobDragValue(0, 0, -50, 50, 220), 0); // filtro al pinzar en el centro: sin salto
   assert.equal(knobAngle(0, -50, 50), 0); // centro = aguja arriba (marca)
+  // EQ asimetrica (-26..+6 dB): 0 dB arriba, extremos a ±135°, y arrastrar desde 0 no salta.
+  assert.equal(knobAngle(0, -26, 6), 0); assert.equal(knobAngle(-26, -26, 6), -135); assert.equal(knobAngle(6, -26, 6), 135);
+  assert.equal(knobDragValue(0, 0, -26, 6, 220), 0); assert.equal(knobDragValue(0, 110, -26, 6, 220), 6); assert.equal(knobDragValue(0, -110, -26, 6, 220), -26);
   assert.equal(knobDragValue(0, 220, -50, 50, 220), 50);
   assert.equal(knobDragValue(0, -220, -50, 50, 220), -50);
 });
@@ -563,6 +594,203 @@ test('Modo manos: apertura monotona al filtro, latido y salida instantanea', asy
   assert.equal(handModeShouldExit({ anyHandPresent: false, lostSince: 1000, now: 99999, seenHands: true, mouseControl: true }), false);
   assert.equal(handModeShouldExit({ anyHandPresent: false, lostSince: 1000, now: 1180, seenHands: true }), true);
 });
+test('ECO puno: extension, puerta 0,3 s, dosis anclada, lanzar/cancelar, golpe y plan', async () => {
+  const { handExtension01, FistGate, anchoredDose, throwDecision, nextBeatCut, targetStartPosition, launchPlan, crossTargetFor } = await import('../src/audio/eco-hand.js');
+  const mkHand = (spread) => { const lm = Array.from({ length: 21 }, () => ({ x: 0, y: 0 })); lm[9] = { x: 0, y: 1 }; [8, 12, 16, 20].forEach(i => lm[i] = { x: 0, y: spread }); return lm; };
+  assert.ok(handExtension01(mkHand(1.85)) > 0.9); // abierta
+  assert.ok(handExtension01(mkHand(1.05)) < 0.1); // puno
+  const fist = handExtension01(mkHand(1.2)), open = handExtension01(mkHand(1.8));
+  const g = new FistGate({ holdMs: 300 });
+  assert.equal(g.update({ extension01: fist, now: 0 }).state, 'cerrando');
+  assert.equal(g.update({ extension01: fist, now: 200 }).event, null); // aun no: bailar no agarra
+  assert.equal(g.update({ extension01: fist, now: 300 }).event, 'grabbed');
+  // Dosificar anclado: sin movimiento no hay salto; subir suma, bajar resta.
+  assert.equal(anchoredDose({ anchorY: 400, y: 400, stageH: 800, anchorDose: 0.4 }), 0.4);
+  assert.ok(Math.abs(anchoredDose({ anchorY: 400, y: 300, stageH: 800, anchorDose: 0.4 }) - 0.9) < 1e-9); // subir 100 px (mitad del recorrido de un palmo, 200 px)
+  assert.equal(anchoredDose({ anchorY: 400, y: 900, stageH: 800, anchorDose: 0.4 }), 0);
+  assert.equal(anchoredDose({ anchorY: 400, y: -900, stageH: 800, anchorDose: 0.4 }), 1);
+  // Lanzar: apertura rapida + vuelo hacia B (deck A: hacia la derecha).
+  const opened = g.update({ extension01: open, now: 420 });
+  assert.equal(opened.event, 'opened'); assert.ok(opened.openMs <= 220, `openMs ${opened.openMs}`);
+  assert.equal(throwDecision({ wasGrabbing: true, openMs: opened.openMs, dxPx: 220, dtMs: 200, dirSign: 1, stageW: 1000 }), 'lanzar');
+  assert.equal(throwDecision({ wasGrabbing: true, openMs: opened.openMs, dxPx: -220, dtMs: 200, dirSign: 1, stageW: 1000 }), 'cancelar'); // hacia el lado contrario
+  assert.equal(throwDecision({ wasGrabbing: true, openMs: 600, dxPx: 220, dtMs: 200, dirSign: 1, stageW: 1000 }), 'cancelar'); // abrir despacio
+  assert.equal(throwDecision({ wasGrabbing: false, openMs: 50, dxPx: 300, dtMs: 150, dirSign: 1, stageW: 1000 }), 'cancelar'); // sin puno previo: el baile no lanza
+  assert.equal(throwDecision({ wasGrabbing: true, openMs: 100, dxPx: 220, dtMs: 200, dirSign: -1, stageW: 1000 }), 'cancelar'); // A manda a la derecha; a la izquierda no
+  assert.equal(throwDecision({ wasGrabbing: true, openMs: 100, dxPx: -220, dtMs: 200, dirSign: -1, stageW: 1000 }), 'lanzar'); // B manda a la izquierda
+  // Una mano abierta que pasa no agarra ni lanza.
+  const g2 = new FistGate({ holdMs: 300 });
+  assert.equal(g2.update({ extension01: open, now: 0 }).state, 'abierta');
+  assert.equal(g2.update({ extension01: fist, now: 100 }).state, 'cerrando');
+  assert.equal(g2.update({ extension01: open, now: 150 }).state, 'abierta'); // puno breve soltado: sin agarre
+  // Golpe de corte: siguiente golpe de la rejilla; sin rejilla, inmediato.
+  const cut = nextBeatCut({ position: 10.3, grid: { bpm: 120, firstBeat: 0.25, confidence: 0.9 }, rate: 1 });
+  assert.equal(cut.quantized, true); assert.ok(Math.abs(cut.atPosition - 10.75) < 1e-9); assert.ok(Math.abs(cut.delaySec - 0.45) < 1e-9);
+  assert.equal(nextBeatCut({ position: 10.3, grid: null }).quantized, false);
+  assert.equal(nextBeatCut({ position: 10.3, grid: { bpm: 120, firstBeat: 0.25, confidence: 0.1 } }).quantized, false);
+  // Arranque del destino: CUE si existe, si no primer golpe.
+  assert.equal(targetStartPosition({ cue: 12.5, firstBeat: 0.4 }), 12.5);
+  assert.equal(targetStartPosition({ cue: 0, firstBeat: 0.4 }), 0.4);
+  assert.equal(targetStartPosition({ cue: null, firstBeat: null }), 0);
+  // B preparado a mano (movido del principio): arranca justo ahi, no en el CUE ni al inicio.
+  assert.equal(targetStartPosition({ position: 63.2, cue: 12.5, firstBeat: 0.4 }), 63.2);
+  assert.equal(targetStartPosition({ position: 0, cue: 12.5, firstBeat: 0.4 }), 12.5);
+  // Plan: sin pista solo eco; en pausa arranca igualando tempo; sonando y
+  // audible no se toca el tempo; sonando sin oirse se sincroniza al agarrar.
+  assert.deepEqual(launchPlan({ targetHasTrack: false }), { action: 'eco-solo', syncAtGrab: 'none', aviso: 'sin-pista' });
+  assert.deepEqual(launchPlan({ targetHasTrack: true, targetPlaying: false, tempoSyncOk: true }), { action: 'arranca-en-el-golpe', syncAtGrab: 'tempo', aviso: null });
+  assert.equal(launchPlan({ targetHasTrack: true, targetPlaying: false, tempoSyncOk: false }).aviso, 'tempo-distinto');
+  assert.deepEqual(launchPlan({ targetHasTrack: true, targetPlaying: true, targetAudible: true, alreadySynced: false }), { action: 'lanzar', syncAtGrab: 'none', aviso: 'no-sincronizada' });
+  assert.equal(launchPlan({ targetHasTrack: true, targetPlaying: true, targetAudible: true, alreadySynced: true }).aviso, null);
+  assert.equal(launchPlan({ targetHasTrack: true, targetPlaying: true, targetAudible: false, tempoSyncOk: true }).syncAtGrab, 'completo');
+  assert.equal(crossTargetFor(0), 1); assert.equal(crossTargetFor(1), -1);
+  // El gesto elige: arbitraje y que la pinza doble no se lea como puno.
+  const { gestureEffectChoice } = await import('../src/audio/handfx.js');
+  assert.equal(gestureEffectChoice({ doublePinchGrabbed: true }), 'filter');
+  assert.equal(gestureEffectChoice({ fistGrabbed: true }), 'eco');
+  assert.equal(gestureEffectChoice({ doublePinchGrabbed: true, fistGrabbed: true }), 'filter');
+  assert.equal(gestureEffectChoice({ fistGrabbed: true, busy: true }), null); // efecto en uso: el otro no entra
+  assert.equal(gestureEffectChoice({ doublePinchGrabbed: true, busy: true }), null);
+  assert.equal(gestureEffectChoice({}), null);
+  // Mano en pinza (pulgar e indice juntos, demas dedos extendidos):
+  // su extension queda muy por encima del puno, y la puerta no agarra.
+  const pinchLm = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
+  pinchLm[9] = { x: 0, y: 1 }; // escala muneca->nudillo medio = 1
+  pinchLm[8] = { x: 0.1, y: 1.6 }; pinchLm[12] = { x: 0, y: 1.85 }; pinchLm[16] = { x: 0, y: 1.8 }; pinchLm[20] = { x: 0, y: 1.65 };
+  const pinchExt = handExtension01(pinchLm);
+  assert.ok(pinchExt > 0.6, `extension de pinza ${pinchExt} (puno exige <=0,35)`);
+  const gf = new FistGate({ holdMs: 300 });
+  let grabbedPinch = false;
+  for (let t = 0; t <= 600; t += 33) if (gf.update({ extension01: pinchExt, now: t }).event === 'grabbed') grabbedPinch = true;
+  assert.equal(grabbedPinch, false); // a 30 fps, la pinza sostenida nunca es puno
+  // Pulgar arriba = lanzar: con el puno cerrado y el pulgar levantado se
+  // confirma tras holdMs; el puno normal (pulgar a la altura del nudillo) no.
+  const { thumbUp01, ThumbGate } = await import('../src/audio/eco-hand.js');
+  const fistLm = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
+  fistLm[0] = { x: 0, y: 1 }; fistLm[9] = { x: 0, y: 0 }; fistLm[5] = { x: -0.2, y: 0.05 };
+  [8, 12, 16, 20].forEach(i => { fistLm[i] = { x: 0, y: 0.05 }; }); // puntas cerca de la muneca (~1 escala)
+  fistLm[4] = { x: -0.3, y: 0.1 };
+  assert.equal(thumbUp01(fistLm), 0);
+  const upLm = fistLm.map(p => ({ ...p })); upLm[4] = { x: -0.3, y: -0.8 };
+  assert.ok(thumbUp01(upLm) >= 0.75, `pulgar arriba ${thumbUp01(upLm)}`);
+  assert.equal(thumbUp01(pinchLm), 0); // mano abierta: nunca es pulgar arriba
+  const tg = new ThumbGate({ holdMs: 250 });
+  let fired = 0;
+  for (let t = 0; t <= 600; t += 33) if (tg.update({ thumb01: 1, now: t }) === 'confirmed') fired++;
+  assert.equal(fired, 1); // un solo disparo mientras siga arriba
+  tg.reset(); assert.equal(tg.update({ thumb01: 1, now: 0 }), null); assert.equal(tg.update({ thumb01: 1, now: 100 }), null);
+  // Ventana de lanzamiento: el barrido puede ir antes o despues de abrir.
+  const { throwWindowDecision } = await import('../src/audio/eco-hand.js');
+  const S = (pts) => pts.map(([x, y, t]) => ({ x, y, t }));
+  // Abrir y LUEGO barrer (lo que le paso al usuario: antes cancelaba).
+  const openThenSweep = S([[400, 300, 700], [400, 300, 850], [400, 300, 1000], [470, 300, 1100], [560, 300, 1200], [660, 300, 1300]]);
+  assert.equal(throwWindowDecision({ samples: openThenSweep, dirSign: 1, stageW: 1000 }).decision, 'lanzar');
+  // Barrer y LUEGO abrir: el recorrido ya esta en las muestras previas.
+  const sweepThenOpen = S([[400, 300, 700], [500, 300, 830], [600, 300, 950], [660, 300, 1000], [660, 300, 1150]]);
+  assert.equal(throwWindowDecision({ samples: sweepThenOpen, dirSign: 1, stageW: 1000 }).decision, 'lanzar');
+  // Abrir sin moverse: la ventana termina sin lanzamiento.
+  const openStill = S([[400, 300, 700], [405, 300, 1000], [402, 300, 1400]]);
+  assert.equal(throwWindowDecision({ samples: openStill, dirSign: 1, stageW: 1000 }).decision, 'sin-lanzamiento');
+  // Barrido lento (sin velocidad) tampoco lanza.
+  const slowDrift = S([[400, 300, 0], [500, 300, 1000], [560, 300, 2000]]);
+  assert.equal(throwWindowDecision({ samples: slowDrift, dirSign: 1, stageW: 1000 }).decision, 'sin-lanzamiento');
+  // Bajar la mano cancela aunque haya barrido hacia B.
+  const lowered = S([[400, 300, 700], [560, 560, 900], [660, 620, 1100]]);
+  const low = throwWindowDecision({ samples: lowered, dirSign: 1, stageW: 1000, anchorY: 300, stageH: 800 });
+  assert.equal(low.decision, 'cancelar'); assert.equal(low.reason, 'bajada');
+  // Hacia el lado contrario (desde A, a la izquierda) no lanza.
+  const wrongWay = S([[600, 300, 700], [450, 300, 900], [360, 300, 1100]]);
+  assert.equal(throwWindowDecision({ samples: wrongWay, dirSign: 1, stageW: 1000 }).decision, 'sin-lanzamiento');
+});
+test('ROLL/FRENO: dedos con histeresis, palma quieta, slip y curva del freno', async () => {
+  const { fingerExtensions, FingerCounter, PalmGate, rollSizeBeats, brakeDurationBeats, brakeRate, brakeAdvance, slipPosition } = await import('../src/audio/roll-brake.js');
+  const { nextBeatCut } = await import('../src/audio/eco-hand.js');
+  const hand = (n, { spread = 0.3 } = {}) => {
+    const lm = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
+    lm[1] = { x: -0.4, y: 0.4 }; lm[2] = { x: -0.7, y: 0.8 }; lm[3] = { x: -0.9, y: 1.2 }; lm[4] = { x: -1.1, y: 1.6 }; // pulgar extendido
+    [5, 9, 13, 17].forEach((mcp, fi) => {
+      const x = (fi - 1.5) * spread; lm[mcp] = { x, y: 1 };
+      if (fi < n) { lm[mcp + 1] = { x, y: 1.5 }; lm[mcp + 2] = { x, y: 1.8 }; lm[mcp + 3] = { x, y: 2.1 }; }
+      else { lm[mcp + 1] = { x, y: 1.35 }; lm[mcp + 2] = { x, y: 1.12 }; lm[mcp + 3] = { x, y: 1.04 }; }
+    });
+    return lm;
+  };
+  assert.ok(fingerExtensions(hand(3))[0] > 0.9 && fingerExtensions(hand(3))[3] < 0.3);
+  const fc = new FingerCounter({ stableMs: 150 });
+  assert.equal(fc.update({ landmarks: hand(2), now: 0 }).count, -1); // aun sin estabilizar
+  assert.equal(fc.update({ landmarks: hand(2), now: 160 }).count, 2);
+  assert.equal(fc.update({ landmarks: hand(3), now: 200 }).count, 2); // aun inestable
+  assert.equal(fc.update({ landmarks: hand(3), now: 240 }).count, 2);
+  assert.equal(fc.update({ landmarks: hand(3), now: 360 }).count, 3); // estable ~150 ms
+  assert.equal(fc.update({ landmarks: hand(0), now: 500 }).count, 3);
+  assert.equal(fc.update({ landmarks: hand(0), now: 660 }).count, 0); // cerrar = salir
+  const fc4 = new FingerCounter({ stableMs: 150 });
+  fc4.update({ landmarks: hand(4), now: 0 });
+  assert.equal(fc4.update({ landmarks: hand(4), now: 160 }).count, 4); // zona muerta
+  assert.equal(rollSizeBeats(1), 1); assert.equal(rollSizeBeats(2), 0.5); assert.equal(rollSizeBeats(3), 0.25); assert.equal(rollSizeBeats(4), null); assert.equal(rollSizeBeats(0), null);
+  // Palma quieta: quieta dispara a los ~400 ms; moviendose o abierta con
+  // dedos separados, nunca.
+  const pg = new PalmGate({ holdMs: 400 });
+  assert.equal(pg.update({ landmarks: hand(4), center: { x: 500, y: 300 }, now: 0, stageW: 1000 }).event, null);
+  assert.equal(pg.update({ landmarks: hand(4), center: { x: 503, y: 302 }, now: 200, stageW: 1000 }).event, null);
+  assert.equal(pg.update({ landmarks: hand(4), center: { x: 502, y: 301 }, now: 410, stageW: 1000 }).event, 'brake');
+  const pgMove = new PalmGate({ holdMs: 400 });
+  let firedMove = false;
+  for (let t = 0; t <= 1200; t += 100) if (pgMove.update({ landmarks: hand(4), center: { x: 300 + t * 0.2, y: 300 }, now: t, stageW: 1000 }).event) firedMove = true;
+  assert.equal(firedMove, false); // mano abierta que pasa no es FRENO
+  const pgSpread = new PalmGate({ holdMs: 400 });
+  let firedSpread = false;
+  for (let t = 0; t <= 800; t += 100) if (pgSpread.update({ landmarks: hand(4, { spread: 1.1 }), center: { x: 500, y: 300 }, now: t, stageW: 1000 }).event) firedSpread = true;
+  assert.equal(firedSpread, false); // dedos separados no es palma de alto
+  // Cuantizacion y slip (±5/±10 ms en la matematica).
+  const cut = nextBeatCut({ position: 10.3, grid: { bpm: 160, firstBeat: 0.1, confidence: 0.9 }, rate: 1 });
+  assert.ok(Math.abs(cut.delaySec - ((0.1 + Math.ceil((10.3 - 0.1) / 0.375) * 0.375) - 10.3)) < 0.005);
+  assert.ok(Math.abs(slipPosition(10, 2, 1.02) - 12.04) < 0.01);
+  const size160 = { 1: 0.375, 0.5: 0.1875, 0.25: 0.09375 };
+  for (const b of [1, 0.5, 0.25]) assert.ok(Math.abs(size160[b] - b * 60 / 160) < 0.005);
+  // Freno: arriba 1 tiempo, abajo 3; cae desde el primer instante, llega a 0 y su integral.
+  assert.equal(brakeDurationBeats(1), 1); assert.equal(brakeDurationBeats(0), 3); assert.equal(brakeDurationBeats(0.5), 2);
+  assert.equal(brakeRate(0), 1); assert.ok(Math.abs(brakeRate(1)) < 1e-12); assert.ok(brakeRate(0.1) < 0.86); assert.ok(brakeRate(0.5) < 0.36);
+  assert.ok(Math.abs(brakeAdvance(2, 2) - 2 / 2.5) < 1e-9); // area de (1-t)^1,5 = 1/2,5
+  // Arbitraje de los cuatro gestos y supresion del freno tras ECO.
+  const { gestureEffectChoice } = await import('../src/audio/handfx.js');
+  const { brakePlan, palmHeight01 } = await import('../src/audio/roll-brake.js');
+  assert.equal(gestureEffectChoice({ fingers: 1 }), 'roll');
+  assert.equal(gestureEffectChoice({ fingers: 2 }), 'roll');
+  assert.equal(gestureEffectChoice({ fingers: 3 }), 'roll');
+  assert.equal(gestureEffectChoice({ fingers: 4 }), null); // zona muerta
+  assert.equal(gestureEffectChoice({ fingers: 0 }), null); // 0 es puno/ECO, no ROLL
+  assert.equal(gestureEffectChoice({ palmBrake: true }), 'brake');
+  assert.equal(gestureEffectChoice({ palmBrake: true, palmSuppressed: true }), null); // tras lanzar ECO
+  assert.equal(gestureEffectChoice({ fingers: 2, busy: true }), null); // un efecto en uso bloquea
+  assert.equal(gestureEffectChoice({ palmBrake: true, busy: true }), null);
+  assert.equal(gestureEffectChoice({ doublePinchGrabbed: true, fingers: 2, palmBrake: true }), 'filter');
+  assert.equal(palmHeight01({ y: 0 }, 800), 1); assert.equal(palmHeight01({ y: 800 }, 800), 0);
+  assert.equal(palmHeight01({ y: 320 }, 800), 1); assert.equal(palmHeight01({ y: 600 }, 800), 0); // franja corta: 40 %..75 %
+  assert.ok(Math.abs(palmHeight01({ y: 460 }, 800) - 0.5) < 1e-9);
+  assert.deepEqual(brakePlan({ height01: 1, bpm: 120, rate: 1 }), { beats: 1, durationSec: 0.5, label: 'SECO' });
+  assert.equal(brakePlan({ height01: 0, bpm: 120, rate: 1 }).durationSec, 1.5); // 3 tiempos a 120 BPM
+  // Medicion offline (matematica, sin audio): a 160 BPM el freno seco
+  // (1 tiempo) dura 0,375 s, llega a velocidad 0 y, tras sujetar la
+  // palma 1 s mas, la vuelta cae en un golpe de la rejilla y en la
+  // posicion slip (±10 ms).
+  const grid160 = { bpm: 160, firstBeat: 0.1, confidence: 0.9 };
+  const plan = brakePlan({ height01: 1, bpm: 160, rate: 1 });
+  assert.ok(Math.abs(plan.durationSec - 0.375) < 0.005);
+  assert.equal(brakeRate(1), 0);
+  const holdEndCtx = plan.durationSec + 1; // freno + 1 s parado
+  const slipAtHold = slipPosition(10, holdEndCtx, 1);
+  const ret = nextBeatCut({ position: slipAtHold, grid: grid160, rate: 1 });
+  assert.equal(ret.quantized, true);
+  const slipAtReturn = slipPosition(10, holdEndCtx + ret.delaySec, 1);
+  assert.ok(Math.abs(slipAtReturn - ret.atPosition) < 0.010, `vuelta slip ${slipAtReturn} vs golpe ${ret.atPosition}`);
+  const beatK = (ret.atPosition - grid160.firstBeat) / (60 / 160);
+  assert.ok(Math.abs(beatK - Math.round(beatK)) < 1e-6); // cae en golpe exacto
+  // El roll repite 1/½/¼ dentro de ±5 ms a 160 BPM (ya arriba) y la
+  // salida slip tras 8 repeticiones de ½ coincide con el reloj sin roll.
+  assert.ok(Math.abs(8 * (0.5 * 60 / 160) - 1.5) < 0.005);
+  assert.ok(Math.abs(slipPosition(4.25, 1.5, 1) - (4.25 + 1.5)) < 0.010);
+});
 test('formato es: TRIM en dB, FILTRO LP/HP/Neutro y coma decimal', async () => {
   const { fmtEs, fmtDb, fmtTrimDb, fmtPct, fmtTempo, fmtFilter, displayTrackName } = await import('../src/audio/format.js');
   assert.equal(displayTrackName('Boiling_Energy_-_You_Are_Sick_Free_Download.mp3'), 'Boiling Energy – You Are Sick');
@@ -672,4 +900,122 @@ test('suavizado reduce saltos y fader mapea bordes', () => {
   assert.equal(s.update(100), 50);
   assert.equal(faderValue({ rect: { x: 0, y: 0, w: 100, h: 10 }, orientation: 'h' }, 0, 0), 0);
   assert.equal(faderValue({ rect: { x: 0, y: 0, w: 100, h: 10 }, orientation: 'h' }, 100, 0), 1);
+});
+test('STEMS: buffer de 8 canales alineado y cambio de fuente en el mismo punto', async () => {
+  const { Channel } = await import('../src/audio/engine.js');
+  const { buildStemBuffer } = await import('../src/audio/stems-client.js');
+  // buildStemBuffer: 4 stems estereo -> 8 canales con la longitud de la original (recorta/rellena).
+  const mk = (n, len, v) => { const d = Array.from({ length: n }, () => new Float32Array(len).fill(v)); return { numberOfChannels: n, length: len, getChannelData: c => d[c] }; };
+  const fakeCtx = { sampleRate: 48000, createBuffer: (n, len) => mk(n, len, 0) };
+  const out = buildStemBuffer(fakeCtx, [mk(2, 12, 0.1), mk(2, 8, 0.2), mk(1, 10, 0.3), mk(2, 10, 0.4)], 10);
+  assert.equal(out.numberOfChannels, 8);
+  assert.equal(out.getChannelData(0)[9], Math.fround(0.1)); // recortado a 10
+  assert.equal(out.getChannelData(2)[7], Math.fround(0.2)); assert.equal(out.getChannelData(3)[9], 0); // relleno con silencio
+  assert.equal(out.getChannelData(5)[0], Math.fround(0.3)); // mono duplicado a L/R
+  // Channel.setStems: solo acepta 8 canales con la misma duracion; si suena, sigue en el mismo punto.
+  const node = () => ({ connect() {}, disconnect() {}, gain: { value: 1, setTargetAtTime() {}, cancelScheduledValues() {}, setValueAtTime() {}, linearRampToValueAtTime() {} }, frequency: { value: 0, setTargetAtTime() {} }, Q: { value: 0 } });
+  const starts = [];
+  const ctx = { currentTime: 0, createGain: node, createBiquadFilter: node, createAnalyser: node, createChannelSplitter: node, createChannelMerger: node,
+    createBufferSource: () => ({ buffer: null, playbackRate: { value: 1, setTargetAtTime() {} }, connect() {}, start(when, off) { starts.push({ buf: this.buffer, off }); }, stop() {}, onended: null, loop: false }) };
+  const ch = new Channel(ctx, node());
+  const orig = { duration: 100, numberOfChannels: 2 }, stems = { duration: 100.05, numberOfChannels: 8 };
+  ch.load(orig); ch.play(); ctx.currentTime = 10;
+  assert.equal(ch.setStems({ duration: 100, numberOfChannels: 2 }), false);
+  assert.equal(ch.setStems({ duration: 90, numberOfChannels: 8 }), false);
+  assert.equal(ch.setStems(stems), true);
+  const last = starts.at(-1);
+  assert.equal(last.buf, stems); assert.ok(Math.abs(last.off - 10) < 0.05);
+  ch.clearStems(); assert.equal(starts.at(-1).buf, orig);
+  ch.load(orig); assert.equal(ch.stemsOn, false); // cargar otra pista quita los stems
+});
+test('STEMS: ROLL sobre un solo stem silencia solo ese stem en la pista principal', async () => {
+  const { Channel } = await import('../src/audio/engine.js');
+  const mkParam = () => { const p = { value: 1, last: null, setTargetAtTime(v) { p.last = v; }, cancelScheduledValues() {}, setValueAtTime(v) { p.last = v; }, linearRampToValueAtTime(v) { p.last = v; } }; return p; };
+  const node = () => ({ connect() {}, disconnect() {}, gain: mkParam(), frequency: { value: 0, setTargetAtTime() {} }, Q: { value: 0 } });
+  const ctx = { currentTime: 0, createGain: node, createBiquadFilter: node, createAnalyser: node, createChannelSplitter: node, createChannelMerger: node,
+    createBufferSource: () => ({ buffer: null, playbackRate: { value: 1, setTargetAtTime() {} }, connect() {}, start() {}, stop() {}, onended: null, loop: false }) };
+  const ch = new Channel(ctx, node());
+  ch.load({ duration: 100, numberOfChannels: 2 }); ch.play(); ch.setStems({ duration: 100, numberOfChannels: 8 });
+  ch.srcGain.gain.last = null; ch.stemMain.gates.forEach(g => { g.gain.last = null; });
+  ch.rollTargets = [1]; // BATERIA
+  try {
+    assert.equal(ch.startSlipRoll({ segmentStart: 10, sizeSec: 0.25, whenCtx: 0.1 }), true);
+    assert.equal(ch.stemMain.gates[1].gain.last, 0); // la bateria principal se silencia: suena el roll
+    assert.equal(ch.stemMain.gates[0].gain.last, 1); // la voz sigue normal
+    assert.equal(ch.srcGain.gain.last, 1); // la pista entera no se silencia
+    assert.equal(ch.stemRoll.gates[1].gain.last, 1); assert.equal(ch.stemRoll.gates[0].gain.last, 0); // el roll solo suena en la bateria
+  } finally { ch.cancelRoll(); }
+});
+
+test('SUBIDA y DROP: nivel por altura, etapas, armado, manos juntas y compas', async () => {
+  const { buildLevel, buildStage, OpenHandsGate, HandsTogetherGate, nextBarCut } = await import('../src/audio/buildup.js');
+  // Un palmo (25 % de 800 = 200 px) recorre la subida entera.
+  assert.equal(buildLevel({ anchorY: 500, y: 500, stageH: 800 }), 0);
+  assert.equal(buildLevel({ anchorY: 500, y: 400, stageH: 800 }), 0.5);
+  assert.equal(buildLevel({ anchorY: 500, y: 200, stageH: 800 }), 1);
+  assert.equal(buildLevel({ anchorY: 500, y: 700, stageH: 800 }), 0);
+  // Etapas: roll cada vez mas corto, el bajo sale a mitad, pasa-altos sube.
+  assert.equal(buildStage(0).rollBeats, null); assert.equal(buildStage(0).bass, 1);
+  assert.equal(buildStage(0.2).rollBeats, 1); assert.equal(buildStage(0.5).rollBeats, 0.5);
+  assert.equal(buildStage(0.7).rollBeats, 0.25); assert.equal(buildStage(1).rollBeats, 0.125);
+  assert.equal(buildStage(0.5).bass, 0); assert.equal(buildStage(1).hp, 1);
+  // Armar: las dos manos abiertas 300 ms; una sola mano no arma.
+  const g = new OpenHandsGate({ holdMs: 300 });
+  assert.equal(g.update({ ext0: 0.9, ext1: null, now: 0 }), false);
+  assert.equal(g.update({ ext0: 0.9, ext1: 0.8, now: 100 }), false);
+  assert.equal(g.update({ ext0: 0.9, ext1: 0.8, now: 420 }), true);
+  assert.equal(g.update({ ext0: 0.2, ext1: 0.8, now: 450 }), false); // puno: se rearma de cero
+  // Manos juntas: tras haber estado separadas, juntas 150 ms = DROP.
+  const tg = new HandsTogetherGate({ holdMs: 150 });
+  const P = (d, now) => tg.update({ a: { x: 0, y: 0 }, b: { x: d, y: 0 }, scale: 1, now });
+  assert.equal(P(2.5, 0), false); // separadas
+  assert.equal(P(0.7, 300), false); // juntas, aun sin sostener
+  assert.equal(P(0.7, 460), true); // sostenidas 160 ms
+  // Armar con las manos ya juntas no suelta el drop.
+  const early = new HandsTogetherGate({ holdMs: 150 });
+  let firedEarly = false;
+  for (let tt = 0; tt <= 600; tt += 33) if (early.update({ a: { x: 0, y: 0 }, b: { x: 0.6, y: 0 }, scale: 1, now: tt })) firedEarly = true;
+  assert.equal(firedEarly, false);
+  // Despacio tambien vale (ya no es aplauso): lo que cuenta es estar juntas.
+  const slow = new HandsTogetherGate({ holdMs: 150 });
+  let firedSlow = false;
+  for (let tt = 0; tt <= 1500; tt += 33) if (slow.update({ a: { x: 0, y: 0 }, b: { x: Math.max(0.6, 3 - 2.4 * tt / 1000), y: 0 }, scale: 1, now: tt })) firedSlow = true;
+  assert.equal(firedSlow, true);
+  // Al juntarse se pierde una mano: cuenta si estaban cerca.
+  const lost = new HandsTogetherGate();
+  lost.update({ a: { x: 0, y: 0 }, b: { x: 3, y: 0 }, scale: 1, now: 0 });
+  lost.update({ a: { x: 0, y: 0 }, b: { x: 1.1, y: 0 }, scale: 1, now: 90 });
+  assert.equal(lost.update({ a: { x: 0, y: 0 }, b: null, scale: 1, now: 150 }), true);
+  // DROP en el siguiente compas (4 golpes) a 120 BPM: compas = 2 s.
+  const cut = nextBarCut({ position: 3.1, grid: { bpm: 120, firstBeat: 0.1, confidence: 0.9 } });
+  assert.ok(cut.quantized); assert.ok(Math.abs(cut.atPosition - 4.1) < 1e-9); assert.ok(Math.abs(cut.delaySec - 1) < 1e-9);
+  assert.equal(nextBarCut({ position: 3.1, grid: null }).quantized, false);
+});
+
+test('Colas por deck: orden de seleccion, mover entre lados, deck libre y orden de tabla', async () => {
+  const { emptyQueues, addToDeck, removeAt, moveAt, takeFromDeck, queueTag, deckFree, sortTracks, dropTrack } = await import('../src/audio/deck-queues.js');
+  const t1 = { name: 'b', metaBpm: 128, duration: 200 }, t2 = { name: 'a', metaBpm: 120, duration: 300 }, t3 = { name: 'c', duration: 100 };
+  let q = emptyQueues();
+  q = addToDeck(q, 0, t1); q = addToDeck(q, 0, t2); q = addToDeck(q, 1, t3);
+  assert.deepEqual(q[0], [t1, t2]); assert.deepEqual(q[1], [t3]);
+  assert.equal(queueTag(q, t2), 'A·2'); assert.equal(queueTag(q, t3), 'B·1'); assert.equal(queueTag(q, {}), null);
+  q = addToDeck(q, 1, t1); // al otro lado: se mueve, no se duplica
+  assert.deepEqual(q[0], [t2]); assert.deepEqual(q[1], [t3, t1]);
+  q = moveAt(q, 1, 1, -1); assert.deepEqual(q[1], [t1, t3]);
+  q = moveAt(q, 1, 0, -1); assert.deepEqual(q[1], [t1, t3]); // fuera de rango: igual
+  const tk = takeFromDeck(q, 1); assert.equal(tk.track, t1); assert.deepEqual(tk.queues[1], [t3]);
+  assert.equal(takeFromDeck(emptyQueues(), 0).track, null);
+  assert.deepEqual(removeAt(q, 1, 0)[1], [t3]);
+  assert.deepEqual(dropTrack(q, t3)[1], [t1]);
+  // Deck libre: nunca pisa lo que suena ni una pista preparada sin sonar.
+  assert.equal(deckFree({ hasTrack: false }), true);
+  assert.equal(deckFree({ hasTrack: true, playing: true, played: true, crossAway: true }), false);
+  assert.equal(deckFree({ hasTrack: true, played: false, crossAway: true }), false);
+  assert.equal(deckFree({ hasTrack: true, played: true, crossAway: false, ended: false }), false); // pausa breve en su lado
+  assert.equal(deckFree({ hasTrack: true, played: true, crossAway: true }), true);
+  assert.equal(deckFree({ hasTrack: true, played: true, ended: true }), true);
+  // Orden de tabla: vacios al final.
+  assert.deepEqual(sortTracks([t1, t2, t3], 'bpm', 1).map(t => t.name), ['a', 'b', 'c']);
+  assert.deepEqual(sortTracks([t1, t2, t3], 'dur', -1).map(t => t.name), ['a', 'b', 'c']);
+  assert.deepEqual(sortTracks([t1, t2, t3], 'name', 1).map(t => t.name), ['a', 'b', 'c']);
 });

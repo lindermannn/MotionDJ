@@ -31,10 +31,14 @@ export async function createHandTracker(video, onError) {
     };
   } catch (e) { onError?.(e); return null; }
 }
-export async function startCamera(video) {
+// deviceId opcional: sin él, la cámara predeterminada del navegador.
+// Se pide 1920×1080 como ideal; MediaPipe reduce la imagen por dentro.
+export async function startCamera(video, deviceId) {
+  const size = { width: { ideal: 1920 }, height: { ideal: 1080 } };
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }, audio: false
+    video: deviceId ? { deviceId: { exact: deviceId }, ...size } : { ...size, facingMode: 'user' }, audio: false
   });
+  video.srcObject?.getTracks?.().forEach(t => t.stop());
   video.srcObject = stream;
   await video.play();
   return stream;

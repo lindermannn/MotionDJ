@@ -81,21 +81,23 @@ export function analyzeBeatgrid(channelData, sampleRate) {
   // Medido: lento uniforme support ~-0,01; doble real con golpe debil
   // intermedio (0,12/0,16/0,20 de amplitud) support 0,23/0,30/0,38.
   // Por eso el umbral baja de 0,50 a 0,22 (ver musicalOctave).
-  const supportBefore = lagF / 2 >= 1 ? corrAt(lagF / 2) / (y1 || 1) : 0;
-  const octaveSupport = bpm < 90 ? supportBefore : null;
-  const doubled = musicalOctave(bpm, supportBefore);
-  const wasDoubled = doubled !== bpm;
+  const s2 = lagF / 2 >= 1 ? corrAt(lagF / 2) / (y1 || 1) : 0;
+  const s3 = lagF / 3 >= 1 ? corrAt(lagF / 3) / (y1 || 1) : 0;
+  const sHalf = corrAt(lagF * 2) / (y1 || 1);
+  const choice = musicalOctaveChoice(bpm, { s2, s3, sHalf });
+  const octaveSupport = choice.factor !== 1 ? choice.support : (bpm < 90 ? Math.max(s2, s3) : null);
+  const wasDoubled = choice.factor !== 1;
   if (wasDoubled) {
-    lagF /= 2; bpm = doubled;
+    lagF /= choice.factor; bpm = choice.bpm;
     confidence = Math.max(0, Math.min(1, corrAt(lagF)));
   }
   // 4) Ambiguedad de octava: subdivision fuerte a doble velocidad.
   const halfScore = lagF / 2 >= 1 ? corrAt(lagF / 2) : 0;
-  // Ambigua si se doblo con soporte justito (<0,75), si no se doblo pero
-  // hay soporte moderado de posible mitad (>=0,15 con candidato <90), si
+  // Ambigua si se eligio otra octava con soporte justito (<0,75), si no
+  // se eligio pero hay soporte moderado de posible fraccion (>=0,15), si
   // hay subdivision fuerte o si el pico lento era mas fuerte que el elegido.
-  const ambiguous = wasDoubled ? (octaveSupport !== null && octaveSupport < 0.75)
-    : ((octaveSupport !== null && octaveSupport >= 0.15) || (y1 > 0 && (halfScore >= 0.72 * y1 || demotedSlowPeak)));
+  const ambiguous = (octaveSupport !== null && (wasDoubled ? octaveSupport < 0.75 : octaveSupport >= 0.15))
+    || (y1 > 0 && (halfScore >= 0.72 * y1 || demotedSlowPeak));
   // 5) Fase: plegar la envolvente sobre el periodo y buscar el maximo.
   let bestPhase = 0, bestScore = -Infinity;
   const phaseScores = new Float32Array(Math.ceil(lagF) + 1);
@@ -118,16 +120,26 @@ export function analyzeBeatgrid(channelData, sampleRate) {
   firstBeat = ((firstBeat % period) + period) % period; // fase en [0, periodo)
   return { bpm, firstBeat, confidence, ambiguous };
 }
-// Criterio musical de octava: support = autocorrelacion a mitad de periodo
-// dividida por la del periodo elegido. Solo dobla candidatos de baile.
+// Criterio musical de octava/fraccion (ampliado): el candidato puede
+// ser 1/2 o 1/3 del real (53,3 = 106,6 o 159,9) o el doble por arriba.
+// s2/s3 = autocorrelacion a lag/2 y lag/3 dividida por la del periodo
+// elegido; sHalf = la de 2*lag. Se elige el factor con MEJOR evidencia
+// (mayor soporte >= 0,22) cuyo resultado cae en el rango musical
+// ~70-180 BPM. Medido: lento uniforme ~-0,01 en todo; 160 debil leido
+// 53,3 da s3 0,24-0,40 y s2 ~-0,02; 107 debil leido 53,6 da s2 ~0,34.
+export function musicalOctaveChoice(bpm, { s2 = 0, s3 = 0, sHalf = 0 } = {}) {
+  const b = Number(bpm) || 0;
+  if (!b) return { bpm: b, factor: 1, support: 0 };
+  const inRange = v => v >= 70 && v <= 180;
+  const opts = [];
+  if (inRange(b * 2) && s2 >= 0.22) opts.push({ bpm: b * 2, factor: 2, support: s2 });
+  if (inRange(b * 3) && s3 >= 0.22) opts.push({ bpm: b * 3, factor: 3, support: s3 });
+  if (opts.length) { opts.sort((a, c) => c.support - a.support || a.factor - c.factor); return opts[0]; }
+  if (b > 180 && inRange(b / 2) && sHalf >= 0.5) return { bpm: b / 2, factor: 0.5, support: sHalf };
+  return { bpm: b, factor: 1, support: 0 };
+}
 export function musicalOctave(bpm, support) {
-  // Umbrales medidos: lento uniforme ~-0,01; doble real con golpe debil
-  // intermedio 0,12/0,16/0,20/0,25 da 0,23/0,30/0,38/0,46; acento alterno
-  // fuerte ~0,54 y medio ~0,78. Umbral 0,22: dobla el doble real debil
-  // sin doblar el lento uniforme (margen amplio sobre -0,01).
-  if (!bpm || bpm >= 90) return bpm;
-  const d = bpm * 2;
-  return d >= 90 && d <= 180 && support >= 0.22 ? d : bpm;
+  return musicalOctaveChoice(bpm, { s2: support }).bpm;
 }
 export function beatPeriod(grid) { return grid?.bpm ? 60 / grid.bpm : null; }
 export function quantizeToBeat(time, grid) {
