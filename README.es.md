@@ -28,7 +28,7 @@ Para producción estática: `npm run build` genera `dist/` (sirve igual en Verce
 - **Selector PISTAS** a pantalla completa: elige la siguiente pista con los dedos mientras la otra suena, con tu orden guardado y confirmación mantenida si el deck está sonando.
 - **Gestos**: pinza para tomar cualquier control (sin saltos), dos pinzas para transición suave o expresiva y para ajustar Filtro/Eco, identidad de manos estable al cruzarse, encuadre RECORTE/COMPLETO con el puntero siguiendo a tu dedo.
 - **Auto DJ** básico A↔B, transición suave, grabación de la mezcla a `.webm`, Vista fácil sin jerga y «Igualar y mezclar» en un botón.
-- **Preescucha en auriculares (experimental)**: bus separado con elección de salida (`setSinkId`) para oír el deck que no suena; no entra en la grabación.
+- **Preescucha en auriculares**: salida separada a elección (`setSinkId`), por ejemplo audífonos, para oír el deck que no suena mientras la mezcla sale por la salida principal; no entra en la grabación. Probada con dos salidas reales.
 
 ## Mapa de gestos
 
@@ -46,7 +46,7 @@ Para producción estática: `npm run build` genera `dist/` (sirve igual en Verce
 - El **BPM es estimado** por análisis propio (medido: demos 122/124 exactos; en las pistas del autor, 154,1 / 152,0 / ~132). SYNC iguala el BPM efectivo y alinea la fase con esa rejilla; no es un beatmatching infalible.
 - El tempo cambia también el tono (no hay time-stretch).
 - La webcam estima manos en 2D: sin profundidad ni contacto real. La garra de cinco dedos sigue experimental y apagada por defecto.
-- Los stems (VOZ, BATERÍA, BAJO, RESTO) necesitan el servidor local de Meta Demucs (`stems-server/`); sin él, la app funciona igual con la pista entera. Sin detección de tonalidad ni micrófono. La preescucha es experimental hasta validarla con dos salidas reales.
+- Los stems (VOZ, BATERÍA, BAJO, RESTO) necesitan el servidor local de Meta Demucs (`stems-server/`); sin él, la app funciona igual con la pista entera. Sin detección de tonalidad ni micrófono.
 
 ## Pruebas
 

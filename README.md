@@ -63,7 +63,7 @@ Press **MANOS · FX** on a deck, pick an effect with a pinch, and the console st
 - **Track picker** full screen: choose the next track with your fingers while the other one plays, with a per-deck queue.
 - **Pinch to grab any control** (no jumps), stable hand identity when hands cross, CROP/FULL framing with the pointer following your finger.
 - **Auto DJ** A↔B, smooth transition, record your mix to `.webm`, an **easy view** without jargon, and "match and mix" in one button.
-- **Headphone cue (experimental)**: separate bus with output selection (`setSinkId`) to pre-listen to the other deck; not included in the recording.
+- **Headphone cue**: a separate output you choose (`setSinkId`), e.g. headphones, to pre-listen to the next deck while the mix plays on the main output; not included in the recording. Tested with two real outputs.
 
 Keyboard: `Q`/`A` deck A · `P`/`L` deck B · `←` `→` crossfader · `G` pause gestures without stopping the music · `F` fullscreen · `Esc` leave hand mode.
 
@@ -72,7 +72,7 @@ Keyboard: `Q`/`A` deck A · `P`/`L` deck B · `←` `→` crossfader · `G` paus
 - **BPM is estimated** by our own analysis. SYNC matches the effective BPM and aligns the phase to that grid; it is not infallible beatmatching.
 - Tempo also changes pitch (no time-stretch).
 - The webcam sees hands in 2D: no depth and no real contact.
-- No key detection and no microphone. Headphone cue is experimental until validated with two real outputs.
+- No key detection and no microphone.
 
 ## Tests
 
