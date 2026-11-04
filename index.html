@@ -30,6 +30,7 @@
     <button id="btnSettings" class="btn" aria-expanded="false" title="Calibración, consola, audio y diagnóstico">⚙ Ajustes</button>
     <details class="menu" id="menuHelp"><summary class="btn">? Ayuda</summary>
       <div class="menu-pop">
+        <button id="btnUsageGuide" class="btn" data-open-guide>📖 Guía de uso</button>
         <button id="btnGuide" class="btn">Inicio guiado</button>
         <button id="btnDemoGuide" class="btn">Demo guiada</button>
         <p class="msg">Atajos: <kbd>Q</kbd>/<kbd>A</kbd> deck A · <kbd>P</kbd>/<kbd>L</kbd> deck B · <kbd>←</kbd><kbd>→</kbd> crossfader · <kbd>G</kbd> gestos · <kbd>F</kbd> pantalla completa · <kbd>Esc</kbd> salir del Modo manos</p>
@@ -44,6 +45,7 @@
     <li><button class="btn small" id="gCamera">3. Activar cámara</button></li>
     <li>4. Pinza sobre un control para tomarlo</li>
     <li>5. Abre MANOS · FX en un deck y elige un efecto</li>
+    <li><button class="btn small" data-open-guide>📖 Guía de uso completa</button></li>
   </ol>
   <p class="privacy">Cámara y audio se procesan <strong>localmente</strong>. Solo la primera descarga del modelo de manos requiere internet.</p>
 </section>
@@ -337,5 +339,6 @@
 </div>
 <footer class="foot">MotionDJ · Identidad propia · La webcam no detecta contacto físico ni profundidad precisa: gestos estimados en 2D.</footer>
 <script type="module" src="/src/app/main.js"></script>
+<script type="module" src="/src/app/usage-guide.js"></script>
 </body>
 </html>
