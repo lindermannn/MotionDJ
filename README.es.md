@@ -6,6 +6,10 @@
 
 Hecha durante el **Meta Global AI Developer Hackathon**.
 
+▶️ **[Ver el video demo (3 min)](https://www.youtube.com/watch?v=BUWUfgjU3jU)**
+
+[![Video demo de MotionDJ](https://img.youtube.com/vi/BUWUfgjU3jU/maxresdefault.jpg)](https://www.youtube.com/watch?v=BUWUfgjU3jU)
+
 📖 **[Guía de uso completa](docs/GUIA.md)**, para principiantes y para DJs con experiencia. También está dentro de la app, en **? Ayuda → Guía de uso**.
 
 ## El problema

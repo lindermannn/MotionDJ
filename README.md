@@ -6,6 +6,10 @@
 
 Built during the **Meta Global AI Developer Hackathon**.
 
+▶️ **[Watch the demo video (3 min)](https://www.youtube.com/watch?v=BUWUfgjU3jU)**
+
+[![MotionDJ demo video](https://img.youtube.com/vi/BUWUfgjU3jU/maxresdefault.jpg)](https://www.youtube.com/watch?v=BUWUfgjU3jU)
+
 📖 **[Full user guide](docs/GUIDE.md)**, for beginners and experienced DJs. It is also inside the app under **? Ayuda → Guía de uso**.
 
 > The interface is in Spanish. Labels you will see: **FRENO** = brake, **SUBIDA** = build-up, **FILTRO** = filter, **ECO** = echo, **VOZ / BATERÍA / BAJO / RESTO** = vocals / drums / bass / other, **FÁCIL** = easy view.
