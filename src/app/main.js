@@ -1983,7 +1983,9 @@ function applyCal(save = true) {
   // que ya devuelve la caja proyectada de cada control.
   const tilt = holo && holo.on && window.innerWidth > 640 ? ` rotateX(${holo.angle}deg)` : '';
   consoleEl.style.transform = `translateX(calc(-50% + ${x}px)) scale(${s * consoleFit})${tilt}`;
-  consoleEl.style.bottom = `calc(3% + ${-y}px)`;
+  // En 3D la lamina sube (16 %) para que las manos trabajen a la altura del
+  // pecho y no en el borde inferior de la camara, donde el detector las pierde.
+  consoleEl.style.bottom = `calc(${tilt ? 16 : 3}% + ${-y}px)`;
   document.documentElement.style.setProperty('--ctl', $('#calSize').value);
   document.documentElement.style.setProperty('--alpha', $('#calOpacity')?.value || 0.86);
   const kv = $('#calKnobVal'); if (kv) kv.textContent = $('#calKnob')?.value || 220;

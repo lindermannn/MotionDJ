@@ -623,7 +623,8 @@ body[data-holo="1"] .deck,body[data-holo="1"] .mixer{background:linear-gradient(
 body[data-holo="1"] .deck-a{border-color:rgba(var(--ha),.9);box-shadow:0 0 28px rgba(var(--ha),.45),inset 0 0 26px rgba(var(--ha),.14),inset 0 1px 0 rgba(255,255,255,.35)}
 body[data-holo="1"] .deck-b{border-color:rgba(var(--hb),.9);box-shadow:0 0 28px rgba(var(--hb),.45),inset 0 0 26px rgba(var(--hb),.14),inset 0 1px 0 rgba(255,255,255,.35)}
 body[data-holo="1"] .mixer{border-color:rgba(190,240,255,.55);box-shadow:0 0 22px rgba(160,220,255,.22),inset 0 0 22px rgba(160,220,255,.08),inset 0 1px 0 rgba(255,255,255,.3)}
-body[data-holo="1"] .deck-head h3{text-shadow:0 0 10px currentColor}
+body[data-holo="1"] .deck-head h3{text-shadow:0 0 10px currentColor;font-size:17px;letter-spacing:.04em}
+body[data-holo="1"] .deck-head .time{font-size:12px}
 body[data-holo="1"] .deck-a .deck-head h3{color:#bff6ff}
 body[data-holo="1"] .deck-b .deck-head h3{color:#ffd1e8}
 /* Ondas y espectros: sin fondo, con brillo */
@@ -669,4 +670,94 @@ body[data-holo="1"] .mixer>.autodj-row{display:contents}
 body[data-holo="1"] .autodj-row>.autodj-toggle{grid-column:1;align-self:center;margin-top:10px}
 body[data-holo="1"] .autodj-row>#btnAutoDjNow{grid-column:3;align-self:center;margin-top:10px}
 body[data-holo="1"] .autodj-row>#btnEasyMix{grid-column:1/-1;justify-self:center;margin-top:6px}
+/* ---- Mesa 3D como lamina ancha y baja (como docs/referencia-conceptual.png) ----
+   Solo reacomoda con CSS grid (mismo DOM, mismos controles); el hit-test de
+   gestos mide los rectangulos reales, asi que no cambia nada mas. */
+@media (min-width:1001px){
+  body[data-holo="1"] .console{width:min(99.5%,1800px);gap:12px;align-items:stretch}
+  body[data-holo="1"] .console{grid-template-columns:minmax(0,1.2fr) minmax(560px,1.15fr) minmax(0,1.2fr)}
+  body[data-holo="1"] .deck .pads{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+  body[data-holo="1"] .deck .pad{height:32px;min-width:0;padding:0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px}
+  body[data-holo="1"] .deck>.row .btn{white-space:nowrap;padding:6px 4px}
+  /* Pie del deck: PISTAS y PREESCUCHA apiladas (su texto cabe entero) y MANOS al lado. */
+  body[data-holo="1"] .deck-foot{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;gap:5px 8px;align-items:center}
+  body[data-holo="1"] .deck-foot>.grow{display:none}
+  body[data-holo="1"] .deck-foot>.pistasbtn{grid-column:1;grid-row:1}
+  body[data-holo="1"] .deck-foot>.cuephones{grid-column:1;grid-row:2}
+  body[data-holo="1"] .deck-foot>.manos-wrap{grid-column:2;grid-row:1/3}
+  body[data-holo="1"] .deck-b .deck-foot{grid-template-columns:auto minmax(0,1fr)}
+  body[data-holo="1"] .deck-b .deck-foot>.pistasbtn,body[data-holo="1"] .deck-b .deck-foot>.cuephones{grid-column:2}
+  body[data-holo="1"] .deck-b .deck-foot>.manos-wrap{grid-column:1}
+  body[data-holo="1"] .deck-foot .btn.pill{white-space:nowrap;padding:5px 10px;width:100%;justify-content:center;display:inline-flex;align-items:center;gap:5px;overflow:visible}
+  /* Deck: jog grande a un lado, onda arriba, controles al otro lado. */
+  body[data-holo="1"] .deck{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"head head" "next next" "wave wave" "zoom zoom" "main row" "main pads" "main foot";column-gap:12px;row-gap:6px;align-content:start;padding:10px 12px}
+  body[data-holo="1"] .deck-b{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"head head" "next next" "wave wave" "zoom zoom" "row main" "pads main" "foot main"}
+  body[data-holo="1"] .deck>.deck-head{grid-area:head}
+  body[data-holo="1"] .deck>.nextup{grid-area:next;justify-self:start;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  body[data-holo="1"] .deck>.wave{grid-area:wave;height:64px;margin-top:2px}
+  body[data-holo="1"] .deck>.zoomwrap{grid-area:zoom;margin-top:0}
+  body[data-holo="1"] .deck .zoomwave{height:26px}
+  body[data-holo="1"] .deck>.deck-main{grid-area:main;margin-top:0;align-self:center;gap:8px}
+  body[data-holo="1"] .deck>.row{grid-area:row;margin:0;align-self:end}
+  body[data-holo="1"] .deck>.pads{grid-area:pads;margin-top:0}
+  body[data-holo="1"] .deck>.deck-foot{grid-area:foot;margin-top:0;align-self:start}
+  body[data-holo="1"] .deck>.deckspec{display:none}
+  body[data-holo="1"] .jog{width:190px;height:190px}
+  body[data-holo="1"] .tempo-col .tempo{height:150px}
+  body[data-holo="1"] .btn.manosfx{width:64px;height:64px}
+  body[data-holo="1"] .btn.manosfx svg{width:24px;height:24px}
+  /* Mezclador: faders a los lados, perillas 3x2, medidores y master al centro. */
+  body[data-holo="1"] .mixer{grid-template-columns:44px minmax(0,1fr) 66px minmax(0,1fr) 44px;grid-template-rows:auto auto auto auto;column-gap:6px;row-gap:4px;padding:8px 10px}
+  body[data-holo="1"] .mixer>h3{grid-column:1/-1;grid-row:1;margin:0 0 2px!important}
+  body[data-holo="1"] .mixer>.mixgrid,body[data-holo="1"] .mixer>.faderow{display:contents}
+  body[data-holo="1"] .mixgrid>.mixcol{grid-row:2/4;grid-template-columns:repeat(3,1fr);gap:0 4px;align-content:start}
+  body[data-holo="1"] .mixgrid>.mixcol:first-child{grid-column:2}
+  body[data-holo="1"] .mixgrid>.mixcol:last-child{grid-column:4}
+  body[data-holo="1"] .mixcol .knobwrap{min-height:76px;min-width:0}
+  body[data-holo="1"] .mixgrid>.mixmeters{grid-column:3;grid-row:2;padding-top:4px;justify-self:center}
+  body[data-holo="1"] .leds{height:96px}
+  body[data-holo="1"] .faderow>div:first-child{grid-column:1;grid-row:2/4;align-self:center;text-align:center;font-size:10px}
+  body[data-holo="1"] .faderow>div:last-child{grid-column:5;grid-row:2/4;align-self:center;text-align:center;font-size:10px}
+  body[data-holo="1"] .faderow>.knobwrap{grid-column:3;grid-row:3;align-self:end;min-width:0}
+  body[data-holo="1"] .vfader{height:140px}
+  body[data-holo="1"] .mixer>.crossbox{grid-column:1/-1;grid-row:4;margin-top:4px;padding:4px 100px 0}
+  body[data-holo="1"] .autodj-row>.autodj-toggle{grid-column:1;grid-row:4;margin-top:14px;justify-self:start;white-space:nowrap;z-index:1}
+  body[data-holo="1"] .autodj-row>#btnAutoDjNow{grid-column:5;grid-row:4;margin-top:14px;justify-self:end;white-space:nowrap;z-index:1}
+  body[data-holo="1"] .autodj-row>#btnEasyMix{grid-column:1/-1;grid-row:5}
+}
+/* Menos texto pequeno en 3D: solo luz y controles. */
+body[data-holo="1"] .jog-hint,body[data-holo="1"] .round-label,body[data-holo="1"] .tempo-range{display:none}
+body[data-holo="1"] .mixer{background:linear-gradient(165deg,rgba(150,230,255,.08),rgba(6,17,25,calc(var(--alpha) * .22)) 45%,rgba(6,17,25,calc(var(--alpha) * .18)))}
+body[data-holo="1"] .deck{background:linear-gradient(165deg,rgba(150,230,255,.08),rgba(6,17,25,calc(var(--alpha) * .25)) 45%,rgba(6,17,25,calc(var(--alpha) * .2)))}
+body[data-holo="1"] .leds{background:rgba(4,18,27,.35);border-color:rgba(190,240,255,.35)}
+body[data-holo="1"] .leds i{box-shadow:0 0 10px rgba(74,222,128,.7)}
+/* Menus del Modo manos con el mismo vidrio holografico (solo en 3D; misma
+   posicion y tamano, solo cambia el aspecto). */
+body[data-holo="1"] .gesture-intro{background:linear-gradient(165deg,rgba(150,230,255,.10),rgba(6,17,25,.42) 45%,rgba(6,17,25,.34));backdrop-filter:none;border:1.5px solid rgba(190,240,255,.55);box-shadow:0 0 28px rgba(160,220,255,.28),inset 0 0 24px rgba(160,220,255,.10),inset 0 1px 0 rgba(255,255,255,.35)}
+body[data-holo="1"] .gesture-intro h2{text-shadow:0 0 14px rgba(160,230,255,.8)}
+body[data-holo="1"] .g-card{background:rgba(255,255,255,.04);border:1.5px solid rgba(190,240,255,.35);box-shadow:0 0 12px rgba(160,220,255,.15),inset 0 0 12px rgba(160,220,255,.06)}
+body[data-holo="1"] .g-card strong{text-shadow:0 0 12px currentColor}
+body[data-holo="1"] .handmode-bar{background:linear-gradient(165deg,rgba(157,140,255,.16),rgba(10,8,28,.5));backdrop-filter:none;box-shadow:0 0 24px rgba(157,140,255,.45),inset 0 0 16px rgba(157,140,255,.12),inset 0 1px 0 rgba(255,255,255,.3)}
+body[data-holo="1"] .stems-deck{background:linear-gradient(165deg,rgba(150,230,255,.08),rgba(8,11,15,.42) 45%,rgba(8,11,15,.34));backdrop-filter:none;border-width:1.5px;box-shadow:0 0 26px color-mix(in srgb,var(--dc,#22d3ee) 55%,transparent),inset 0 0 22px color-mix(in srgb,var(--dc,#22d3ee) 14%,transparent),inset 0 1px 0 rgba(255,255,255,.3)}
+body[data-holo="1"] .stems-deck h3{text-shadow:0 0 12px rgba(255,255,255,.35)}
+body[data-holo="1"] .stems-deck canvas{filter:drop-shadow(0 0 3px rgba(255,255,255,.35))}
+body[data-holo="1"] .fx-palette{background:linear-gradient(165deg,rgba(150,230,255,.10),rgba(4,14,22,.45));backdrop-filter:none;box-shadow:0 0 24px rgba(34,211,238,.35),inset 0 1px 0 rgba(255,255,255,.3)}
+/* Legibilidad con luz clara detras (3D): el vidrio se oscurece segun
+   «Opacidad de la mesa» (0,45 = casi transparente, 1 = oscuro), los textos
+   llevan un contorno oscuro fino y los botones un fondo tintado. */
+body[data-holo="1"] .deck,body[data-holo="1"] .mixer{background:linear-gradient(165deg,rgba(150,230,255,.08),rgba(6,17,25,calc((var(--alpha) - .4) * 1.25)) 40%,rgba(6,17,25,calc((var(--alpha) - .4) * 1.1)))}
+body[data-holo="1"] .deck,body[data-holo="1"] .mixer,body[data-holo="1"] .gesture-intro,body[data-holo="1"] .stems-deck{text-shadow:0 0 2px rgba(0,0,0,.95),0 1px 3px rgba(0,0,0,.85)}
+body[data-holo="1"] .deck-head h3{text-shadow:0 0 2px rgba(0,0,0,.95),0 0 10px currentColor}
+body[data-holo="1"] .deck-head .time,body[data-holo="1"] .mixcol>strong,body[data-holo="1"] .knobval,body[data-holo="1"] .faderow{color:#e6f3f7}
+body[data-holo="1"] .deck .btn,body[data-holo="1"] .mixer .btn,body[data-holo="1"] .deck .pad{background:rgba(3,10,16,calc((var(--alpha) - .3) * .8))}
+body[data-holo="1"] .btn.round,body[data-holo="1"] .btn.syncbtn{background:rgba(3,10,16,calc((var(--alpha) - .3) * .9))}
+body[data-holo="1"] .jog{background-color:rgba(3,10,16,calc((var(--alpha) - .4) * .9))}
+/* Menus del Modo manos con luz clara: vidrio mas oscuro (sigue la opacidad
+   de la mesa) para que titulos y textos pequenos se lean. */
+body[data-holo="1"] .gesture-intro{background:linear-gradient(165deg,rgba(150,230,255,.08),rgba(6,17,25,calc((var(--alpha) - .3) * 1.35)) 35%,rgba(6,17,25,calc((var(--alpha) - .3) * 1.3)))}
+body[data-holo="1"] .g-card{background:rgba(3,10,16,calc((var(--alpha) - .3) * .9))}
+body[data-holo="1"] .handmode-bar{background:linear-gradient(165deg,rgba(157,140,255,.2),rgba(10,8,28,calc((var(--alpha) - .2) * 1.3)))}
+body[data-holo="1"] .handmode-bar,body[data-holo="1"] .fx-palette{text-shadow:0 0 2px rgba(0,0,0,.95),0 1px 3px rgba(0,0,0,.85)}
+body[data-holo="1"] .stems-deck{background:linear-gradient(165deg,rgba(150,230,255,.08),rgba(8,11,15,calc((var(--alpha) - .3) * 1.3)) 35%,rgba(8,11,15,calc((var(--alpha) - .3) * 1.25)))}
+body[data-holo="1"] .fx-palette{background:linear-gradient(165deg,rgba(150,230,255,.1),rgba(4,14,22,calc((var(--alpha) - .3) * 1.4)))}
 #btn3d[aria-pressed="true"]{background:#155e75;border-color:var(--a)}

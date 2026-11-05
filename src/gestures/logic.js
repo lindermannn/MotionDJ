@@ -122,7 +122,7 @@ export function sanitizeCal(raw) {
   const d = RESET_DEFAULTS.cal, c = raw && typeof raw === 'object' ? raw : {};
   const num = (v, lo, hi, def) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : def; };
   return {
-    s: num(c.s, 0.7, 1.15, d.scale), x: num(c.x, -120, 120, d.x), y: num(c.y, -80, 80, d.y),
+    s: num(c.s, 0.7, 1.15, d.scale), x: num(c.x, -120, 120, d.x), y: num(c.y, -360, 80, d.y),
     sens: num(c.sens, 0.25, 0.55, d.sens), size: num(c.size, 0.9, 1.3, d.size), knob: num(c.knob, 120, 420, d.knob)
   };
 }
