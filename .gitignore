@@ -9,3 +9,9 @@ dist/
 *.key
 *.p12
 *.pfx
+
+# Documentos internos de trabajo (no publicos): solo se publican las guias y las licencias
+docs/*.md
+!docs/GUIA.md
+!docs/GUIDE.md
+!docs/licencias.md

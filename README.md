@@ -145,7 +145,7 @@ npm test
 npm run build
 ```
 
-Pure-logic tests (beat grid, SYNC, echo, scrub, gestures, roll, brake, build-up, queues…) plus in-browser checks without a camera. What can only be validated with a webcam and ears is listed in `docs/pruebas.md`.
+Pure-logic tests (beat grid, SYNC, echo, scrub, gestures, roll, brake, build-up, queues…) plus in-browser checks without a camera. Gestures and sound were validated by hand with a real webcam and music.
 
 ## Tech stack
 
@@ -154,4 +154,4 @@ Pure-logic tests (beat grid, SYNC, echo, scrub, gestures, roll, brake, build-up,
 - **Web Audio API** + AudioWorklet: all mixing, effects and scrubbing in the browser
 - **Vite** (MIT): build only; the app is vanilla JavaScript
 
-The rest is original code and sound synthesis; details in `docs/licencias.md`. Project docs (in Spanish) are in `docs/`.
+The rest is original code and sound synthesis; details in `docs/licencias.md`. User guide: `docs/GUIDE.md` (English) and `docs/GUIA.md` (Spanish).

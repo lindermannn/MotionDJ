@@ -143,7 +143,7 @@ npm test
 npm run build
 ```
 
-Pruebas de lógica pura (rejilla, SYNC, eco, scrub, gestos, roll, freno, subida, colas…) y verificación en navegador sin cámara. Lo que solo se valida con webcam y oídos está en `docs/pruebas.md`.
+Pruebas de lógica pura (rejilla, SYNC, eco, scrub, gestos, roll, freno, subida, colas…) y verificación en navegador sin cámara. Los gestos y el sonido se validaron a mano con webcam y música reales.
 
 ## Tecnologías
 
@@ -152,4 +152,4 @@ Pruebas de lógica pura (rejilla, SYNC, eco, scrub, gestos, roll, freno, subida,
 - **Web Audio API** + AudioWorklet: toda la mezcla, los efectos y el scrub en el navegador
 - **Vite** (MIT): solo compila; la app es JavaScript sin framework
 
-El resto es código y síntesis propios; detalle en `docs/licencias.md`. Historia y estado: `docs/estado.md`.
+El resto es código y síntesis propios; detalle en `docs/licencias.md`. Guía de uso: `docs/GUIA.md`.
