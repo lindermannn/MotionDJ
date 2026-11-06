@@ -612,7 +612,7 @@ body.lib-expanded .track-list{max-height:72vh}body.lib-expanded .lib-queues ol{m
 @media (max-width:600px){.ug-body{padding:4px 14px 16px}.ug-head{padding:10px 12px}}
 
 /* ---------- Mesa holografica 3D (prueba; body[data-holo="1"]) ----------
-   Estilo de docs/referencia-conceptual.png: vidrio casi transparente, bordes
+   Estilo de la imagen de concepto del proyecto: vidrio casi transparente, bordes
    de neon (A cian, B magenta), jogs con anillo de marcas y particulas. Solo
    cambia el aspecto: el hit-test sigue usando getBoundingClientRect. */
 body[data-holo="1"]{--ha:34,211,238;--hb:255,79,163}
@@ -670,7 +670,7 @@ body[data-holo="1"] .mixer>.autodj-row{display:contents}
 body[data-holo="1"] .autodj-row>.autodj-toggle{grid-column:1;align-self:center;margin-top:10px}
 body[data-holo="1"] .autodj-row>#btnAutoDjNow{grid-column:3;align-self:center;margin-top:10px}
 body[data-holo="1"] .autodj-row>#btnEasyMix{grid-column:1/-1;justify-self:center;margin-top:6px}
-/* ---- Mesa 3D como lamina ancha y baja (como docs/referencia-conceptual.png) ----
+/* ---- Mesa 3D como lamina ancha y baja (como la imagen de concepto) ----
    Solo reacomoda con CSS grid (mismo DOM, mismos controles); el hit-test de
    gestos mide los rectangulos reales, asi que no cambia nada mas. */
 @media (min-width:1001px){

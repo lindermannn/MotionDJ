@@ -15,3 +15,12 @@ docs/*.md
 !docs/GUIA.md
 !docs/GUIDE.md
 !docs/licencias.md
+
+# Imagenes de trabajo (capturas, maquetas, conceptos): solo locales
+docs/**/*.png
+docs/**/*.webp
+docs/**/*.jpg
+docs/*.png
+docs/*.webp
+docs/*.jpg
+public/images/
